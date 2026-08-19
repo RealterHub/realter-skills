@@ -7,7 +7,7 @@
     {
       "name": "realterid",
       "source": "./plugins/realterid",
-      "description": "Skills para que el asesor inmobiliario gestione el contenido de su sitio RealterID desde su cliente de IA: marca, servicios, blog, testimonios y páginas."
+      "description": "Skills de RealterID para el asesor inmobiliario: define tu marca para la IA, carga propiedades, crea servicios, artículos, testimonios, copies de redes y guiones de video, y publica en tu sitio desde tu cliente de IA."
     }
   ]
 }
