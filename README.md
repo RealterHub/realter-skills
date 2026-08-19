@@ -15,10 +15,17 @@ oro de todas: **jamás inventar datos del asesor** — lo que no dé, se pregunt
 | `fundamentos-de-marca` | Entrevista al asesor y compila su brief de marca para IA (voz, propuesta, evidencia, mercado). Es la skill fundacional: las demás leen ese brief antes de redactar. | ✅ Completa |
 | `crear-servicio` | Crea o mejora una landing de servicio: entrevista → redacción con su voz → publicación (`create_service_draft → set_service_* → publish_service`). | ✅ Completa |
 | `cargar-propiedad` | Carga una propiedad entrevistando al asesor sobre la visita: recorrido estancia por estancia, deducción de amenidades que él confirma, fotos y publicación (`create_property_draft → set_property_* → publish_property`). | ✅ Completa |
+| `crear-copies-sociales` | Genera un pack de copies de redes (Instagram, Facebook, TikTok, LinkedIn, X) para una propiedad ya cargada: entrevista corta de objetivo y audiencia, ángulos y ganchos propuestos desde la ficha, redacción por plataforma. **Solo lecturas MCP**: el pack es local, no se publica. | ✅ Completa |
+| `crear-guion-video` | Escribe guiones para grabar (reels, TikTok, tours, educativos, de zona, testimonios, presentación): gancho con dos variantes, cuerpo en dos columnas toma↔voz/texto en pantalla, CTA y checklist de tomas. **Solo lecturas MCP**: el guion es un entregable local. | ✅ Completa |
 | `escribir-articulo` | Artículos del blog en Markdown vía MCP. | 🚧 Esqueleto |
 | `cargar-testimonio` | Testimonios de clientes reales (se transcriben, nunca se inventan; nacen ocultos hasta que el asesor los muestra). | 🚧 Esqueleto |
 | `editar-paginas` | Las seis páginas del sitio: heros, secciones, CTAs, SEO, con publicación explícita. | 🚧 Esqueleto |
 | `publicar-en-sitio` | Sincroniza el workspace local con el sitio: decide crear/actualizar/al día por pieza y publica con aprobación. | 🚧 Esqueleto |
+
+> Dos de estas skills (`crear-copies-sociales` y `crear-guion-video`) **no tienen ciclo de
+> escritura al MCP**: el sitio no expone tools de copies ni de video, y su entregable es un
+> archivo local que el asesor lleva a donde vaya a postear o grabar. No es un ciclo pendiente de
+> descubrir: es su diseño.
 
 ## Guías compartidas (`plugins/realterid/guides/`)
 

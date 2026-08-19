@@ -32,13 +32,44 @@ mi-sitio/                          # nombre libre; la elige el asesor
     └── <slug>/                    # home-page/, about-page/, ...
 ```
 
-- **Una subcarpeta por tipo** (`perfil/`, `servicios/`, `articulos/`, `testimonios/`, `paginas/`),
-  **una carpeta por pieza**, nombrada por su slug en kebab-case.
+- **Una subcarpeta por tipo** (`perfil/`, `servicios/`, `articulos/`, `testimonios/`, `paginas/`,
+  `propiedades/`, `guiones/`), **una carpeta por pieza**, nombrada por su slug en kebab-case.
 - **`pieza.json` es la fuente de verdad**: sigue el JSON Schema de la skill correspondiente
   (`schema/` dentro de cada skill). Es lo que se publica vía MCP.
 - **`pieza.md` es la vista legible**, regenerada desde el json cada vez que el json cambia —
   **nunca al revés**. Si el asesor edita el .md a mano, la skill lo detecta, incorpora los cambios
   al json con su confirmación y regenera el .md.
+
+## Piezas derivadas (anidadas dentro de otra pieza)
+
+Casi todas las piezas son de primer nivel (`<tipo>/<slug>/pieza.json`). Las que **nacen de otra
+pieza y no se publican al sitio** viven **dentro** de ella, para que el filesystem conserve de
+dónde salieron y quepan varias por original:
+
+```
+propiedades/torre-serena-9b/
+├── pieza.json                                   # la propiedad (se publica)
+├── social/2026-08-19-captacion-compradores/     # pack de copies (local)
+│   ├── pieza.json
+│   └── pieza.md
+└── guiones/2026-08-19-tour/                     # guion de video (local)
+    ├── pieza.json
+    └── pieza.md
+```
+
+Un guion que no es de ninguna propiedad (educativo, de zona, presentación) va suelto en
+`guiones/<fecha>-<tema>/`.
+
+**La regla que lo hace funcionar: el TIPO de una pieza es la carpeta que precede a su carpeta.**
+Sirve igual para `servicios/mi-servicio/` (tipo `servicios`) que para
+`propiedades/<slug>/social/<sub>/` (tipo `social`). Los hooks de Claude Code la aplican tal cual,
+así que una pieza derivada se valida contra su schema y entra en el repaso de cierre exactamente
+igual que una de primer nivel — nada de "como no se publica, no se revisa".
+
+Su `meta` **no lleva `remoteId`, `publishedAt` ni `lastSyncedAt`**: no hay nada que sincronizar
+porque nunca existen en el sitio. Sí llevan `contentHash`, `consumerReview`, `approvedAt` y
+`approvedHash`: la disciplina de evaluar y aprobar antes de dar por terminado no depende de que
+haya publicación.
 
 ## `.realterid/config.json`
 
