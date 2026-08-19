@@ -70,6 +70,12 @@ const yaAvisado = (sessionId, clave) => {
 try {
   const input = await readHookInput()
   const tool = String(input?.tool_name ?? '')
+
+  // Espejo del matcher de `hooks.json`. Es redundante mientras el matcher no cambie, y esa es
+  // justo la idea: si algún día se amplía, este hook no debe empezar a opinar de las LECTURAS
+  // (`get_property`, `list_media`), que son insumo legítimo de la entrevista.
+  if (!/__(set_|create_)/.test(tool)) salir(null)
+
   if (EXCLUIDAS.some((re) => re.test(tool))) salir(null)
 
   const objetivo = objetivoDeTool(tool)

@@ -14,15 +14,21 @@
  * (guides/workspace.md). Solo se lee el estado con `git status --porcelain`.
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { validate } from './lib/schema.mjs'
-import { contentHash, findWorkspace, pieceInfo, readHookInput, readJson } from './lib/workspace.mjs'
+import {
+  buscarPiezas,
+  contentHash,
+  findWorkspace,
+  pieceInfo,
+  readHookInput,
+  readJson,
+} from './lib/workspace.mjs'
 
 const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const TIPOS = ['perfil', 'servicios', 'articulos', 'testimonios', 'paginas']
 
 const salir = (mensaje) => {
   // `continue: true` explícito: este hook informa, jamás retiene el cierre de la sesión.
@@ -55,38 +61,36 @@ try {
   const desactualizadas = []
   const aprobacionCaducada = []
 
-  for (const tipo of TIPOS) {
-    const base = join(workspace, tipo)
-    if (!existsSync(base)) continue
+  // Se recorre el workspace en vez de asumir una lista de carpetas: así entran también las
+  // piezas DERIVADAS que viven dentro de una propiedad (`social/`, `guiones/`), que con la
+  // lista fija quedaban fuera del repaso.
+  for (const file of buscarPiezas(workspace)) {
+    const pieza = pieceInfo(file, workspace, PLUGIN_ROOT)
+    if (!pieza) continue
 
-    for (const entrada of readdirSync(base)) {
-      const file = join(base, entrada, 'pieza.json')
-      if (!existsSync(file)) continue
+    // Se nombra por su carpeta, sin el `/pieza.json`: es como el asesor la reconoce.
+    const rel = pieza.rel.replace(/\/pieza\.json$/i, '')
+    const { data, error } = readJson(file)
+    if (error || !data) {
+      invalidas.push(`${rel} (JSON ilegible)`)
+      continue
+    }
 
-      const { data, error } = readJson(file)
-      const rel = `${tipo}/${entrada}`
-      if (error || !data) {
-        invalidas.push(`${rel} (JSON ilegible)`)
-        continue
-      }
+    if (pieza.schemaPath) {
+      const { data: schema } = readJson(pieza.schemaPath)
+      if (schema && validate(schema, data).length > 0) invalidas.push(rel)
+    }
 
-      const pieza = pieceInfo(file, workspace, PLUGIN_ROOT)
-      if (pieza?.schemaPath) {
-        const { data: schema } = readJson(pieza.schemaPath)
-        if (schema && validate(schema, data).length > 0) invalidas.push(rel)
-      }
+    const md = join(dirname(file), 'pieza.md')
+    try {
+      if (existsSync(md) && statSync(md).mtimeMs < statSync(file).mtimeMs) desactualizadas.push(rel)
+      else if (!existsSync(md)) desactualizadas.push(`${rel} (sin pieza.md)`)
+    } catch {
+      /* permisos o carrera de escritura: no es asunto del aviso */
+    }
 
-      const md = join(base, entrada, 'pieza.md')
-      try {
-        if (existsSync(md) && statSync(md).mtimeMs < statSync(file).mtimeMs) desactualizadas.push(rel)
-        else if (!existsSync(md)) desactualizadas.push(`${rel} (sin pieza.md)`)
-      } catch {
-        /* permisos o carrera de escritura: no es asunto del aviso */
-      }
-
-      if (data?.meta?.approvedHash && data?.content !== undefined) {
-        if (contentHash(data.content) !== data.meta.approvedHash) aprobacionCaducada.push(rel)
-      }
+    if (data?.meta?.approvedHash && data?.content !== undefined) {
+      if (contentHash(data.content) !== data.meta.approvedHash) aprobacionCaducada.push(rel)
     }
   }
 

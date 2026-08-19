@@ -48,6 +48,11 @@ const avisar = (texto) =>
 try {
   const input = await readHookInput()
   const tool = String(input?.tool_name ?? '')
+
+  // Espejo del matcher de `hooks.json`: esta puerta solo juzga publicaciones. Si el matcher se
+  // amplía alguna vez, aquí no se cuelan lecturas ni escrituras de bloque.
+  if (!/__publish_/.test(tool)) salir(null)
+
   const objetivo = objetivoDeTool(tool)
   if (!objetivo) salir(null) // un publish_* que no mapea a una pieza local
 

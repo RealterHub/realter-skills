@@ -6,7 +6,7 @@
  * marca local. Ninguna función lanza: los hooks nunca deben romper la sesión del asesor.
  */
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, parse, relative, resolve, sep } from 'node:path'
 
 const isDirectory = (p) => {
@@ -44,35 +44,95 @@ export const readJson = (file) => {
 }
 
 /**
+ * Schema que le corresponde a cada tipo de pieza. Se resuelven por ruta del plugin desde las
+ * propias skills (`skills/<skill>/schema/…`): no se duplican aquí. Un tipo sin entrada ⇒
+ * `schemaPath: null` y el hook no valida — no se le inventan reglas a una skill que aún no
+ * publicó su schema (articulos, testimonios y paginas siguen siendo esqueletos).
+ */
+const SCHEMAS = {
+  perfil: ['fundamentos-de-marca', 'fundamentos.schema.json'],
+  servicios: ['crear-servicio', 'servicio.schema.json'],
+  propiedades: ['cargar-propiedad', 'propiedad.schema.json'],
+  // Piezas DERIVADAS: nacen de una propiedad y viven dentro de su carpeta (o sueltas, en el
+  // caso de un guion genérico). No se publican al sitio; se validan igual.
+  social: ['crear-copies-sociales', 'copies-sociales.schema.json'],
+  guiones: ['crear-guion-video', 'guion.schema.json'],
+}
+
+/**
  * Tipo de pieza y schema que le corresponde, deducidos de la ruta DENTRO del workspace.
  *
- * Los schemas son los de las propias skills (`skills/<skill>/schema/…`): no se duplican
- * aquí, se resuelven por ruta del plugin. Los tipos cuyas skills aún son esqueleto no
- * tienen schema todavía ⇒ `schemaPath: null` y el hook no valida (no inventa reglas).
+ * La regla es una sola y cubre los dos layouts del plugin: **el tipo es la carpeta que precede
+ * a la carpeta de la pieza**.
+ *
+ *   servicios/mi-servicio/pieza.json                      → tipo `servicios`
+ *   propiedades/torre-9b/social/2026-08-19-branding/…     → tipo `social`   (padre: propiedades/torre-9b)
+ *   propiedades/torre-9b/guiones/2026-08-19-tour/…        → tipo `guiones`  (padre: propiedades/torre-9b)
+ *   guiones/2026-08-19-precios/pieza.json                 → tipo `guiones`
+ *
+ * Antes se exigían exactamente 3 segmentos, así que las piezas derivadas (copies sociales y
+ * guiones de una propiedad, que se anidan dentro de ella a propósito para no perder de vista de
+ * qué nacen) quedaban invisibles: ni se validaban al escribirlas ni entraban al repaso de cierre.
+ * Generalizar por "la carpeta anterior" las cubre sin listas de rutas especiales y deja el
+ * layout plano funcionando igual.
  */
 export const pieceInfo = (absFile, workspaceRoot, pluginRoot) => {
   const rel = relative(workspaceRoot, absFile).split(sep).join('/')
+  // Fuera del workspace (o en sus entrañas ocultas) no opinamos.
+  if (rel.startsWith('..') || rel.split('/').some((s) => s.startsWith('.'))) return null
+
   const segmentos = rel.split('/')
-
-  // Una pieza vive SIEMPRE en <tipo>/<slug>/pieza.json. Cualquier otro .json del
-  // workspace (config, notas del asesor) no es asunto de este hook.
-  if (segmentos.length !== 3 || segmentos[2].toLowerCase() !== 'pieza.json') return null
-  const [tipo, slug] = segmentos
-
-  const SCHEMAS = {
-    perfil: ['fundamentos-de-marca', 'fundamentos.schema.json'],
-    servicios: ['crear-servicio', 'servicio.schema.json'],
-    propiedades: ['cargar-propiedad', 'propiedad.schema.json'],
-    // articulos, testimonios y paginas: sus skills son esqueleto y aún no publican schema.
+  // Cualquier otro .json del workspace (config, notas del asesor) no es asunto de este hook.
+  if (segmentos.length < 3 || segmentos[segmentos.length - 1].toLowerCase() !== 'pieza.json') {
+    return null
   }
+
+  const carpetas = segmentos.slice(0, -1)
+  const slug = carpetas[carpetas.length - 1]
+  const tipo = carpetas[carpetas.length - 2]
   const mapeo = SCHEMAS[tipo]
 
   return {
     rel,
     tipo,
     slug,
+    /** Pieza de la que deriva, si está anidada (`propiedades/torre-9b`). `null` si es de primer nivel. */
+    parent: carpetas.length > 2 ? carpetas.slice(0, -2).join('/') : null,
     schemaPath: mapeo ? join(pluginRoot, 'skills', mapeo[0], 'schema', mapeo[1]) : null,
   }
+}
+
+/**
+ * Todas las `pieza.json` del workspace, a cualquier profundidad admitida.
+ *
+ * Recorre en vez de asumir una lista de carpetas: así el repaso de cierre ve también las piezas
+ * derivadas y los tipos que se añadan mañana, sin tocar este archivo. Se saltan las carpetas
+ * ocultas (`.git`, `.realterid`) y se acota la profundidad porque el workspace del asesor puede
+ * tener cualquier cosa dentro y esto corre en cada cierre de sesión.
+ *
+ * El tope es **5**: es el nivel donde vive el layout más profundo del plugin
+ * (`propiedades/<slug>/social/<sub>/pieza.json` — la raíz cuenta como nivel 1). Con 4 las piezas
+ * derivadas quedaban fuera del recorrido, que es justo el hueco que esto viene a cerrar.
+ */
+export const buscarPiezas = (dir, profundidadMax = 5) => {
+  const encontradas = []
+  const caminar = (actual, nivel) => {
+    if (nivel > profundidadMax) return
+    let entradas = []
+    try {
+      entradas = readdirSync(actual, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entrada of entradas) {
+      if (entrada.name.startsWith('.') || entrada.name === 'node_modules') continue
+      const ruta = join(actual, entrada.name)
+      if (entrada.isDirectory()) caminar(ruta, nivel + 1)
+      else if (entrada.name.toLowerCase() === 'pieza.json') encontradas.push(ruta)
+    }
+  }
+  caminar(dir, 1)
+  return encontradas
 }
 
 /**
