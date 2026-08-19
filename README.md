@@ -80,7 +80,7 @@ Contrato de hooks (ubicación, `${CLAUDE_PLUGIN_ROOT}`, campos de stdin, `permis
 ### Claude Code (recomendado)
 
 ```bash
-claude plugin marketplace add realter/realter-skills
+claude plugin marketplace add RealterHub/realter-skills
 claude plugin install realterid
 ```
 
