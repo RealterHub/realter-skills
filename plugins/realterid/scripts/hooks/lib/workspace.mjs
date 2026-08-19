@@ -62,6 +62,7 @@ export const pieceInfo = (absFile, workspaceRoot, pluginRoot) => {
   const SCHEMAS = {
     perfil: ['fundamentos-de-marca', 'fundamentos.schema.json'],
     servicios: ['crear-servicio', 'servicio.schema.json'],
+    propiedades: ['cargar-propiedad', 'propiedad.schema.json'],
     // articulos, testimonios y paginas: sus skills son esqueleto y aún no publican schema.
   }
   const mapeo = SCHEMAS[tipo]
