@@ -66,7 +66,9 @@ Orden temático sugerido:
 - **Muestra el borrador `pieza.md` COMPLETO** (plantilla en `templates/pieza.md`) y espera
   aprobación antes de persistir o publicar. Itera bloque a bloque si pide cambios.
 - Con aprobación: escribe `pieza.json` conforme al schema, regenera `pieza.md`, actualiza
-  `meta.contentHash`.
+  `meta.contentHash` y deja constancia de la aprobación en `meta.approvedAt` (ahora) y
+  `meta.approvedHash` (= ese `contentHash`). Si el contenido cambia después, la aprobación caduca:
+  se muestra el borrador otra vez antes de publicar. Jamás los escribas sin el "sí" del asesor.
 
 ## Publicación vía MCP
 

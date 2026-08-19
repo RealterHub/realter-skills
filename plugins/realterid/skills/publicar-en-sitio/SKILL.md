@@ -31,7 +31,9 @@ asesor. Nunca publica en bloque sin listar antes qué va a pasar.
    - hash igual → **al día** (no tocar).
    - `publishedAt: null` con `remoteId` → borrador remoto pendiente de **publicar**.
 3. Mostrar el plan como tabla (pieza · acción · detalle) y pedir aprobación; permitir elegir
-   un subconjunto.
+   un subconjunto. La aprobación del **plan** no sustituye la aprobación del **contenido**: una
+   pieza sin `meta.approvedAt`, o cuyo `approvedHash` ya no coincide con su `content`, se muestra
+   entera y se aprueba antes de publicarla (en Claude Code el hook de pre-publicación la frena).
 4. Ejecutar por pieza con las tools de su dominio (servicios, posts, testimonios, páginas,
    marca), verificando antes el estado remoto con la `get_*`/`search_*` correspondiente:
    si el remoto cambió desde `lastSyncedAt`, es **conflicto** — mostrar la diferencia y que
@@ -40,7 +42,8 @@ asesor. Nunca publica en bloque sin listar antes qué va a pasar.
    `publish_page`) y visibilidad en testimonios (`set_testimonial_visibility`).
    Reportar `missing_for_publish`/warnings de lo que no pudo publicarse.
 6. Actualizar `meta` de cada pieza tocada (`remoteId`, `publishedAt`, `lastSyncedAt`,
-   `contentHash`) y regenerar su `pieza.md`.
+   `contentHash`) y regenerar su `pieza.md`. `approvedAt`/`approvedHash` **no se tocan aquí**:
+   los escribe la skill que mostró el borrador cuando el asesor dijo que sí.
 7. Cierre: resumen (creadas / actualizadas / publicadas / al día / con conflicto) y commit
    descriptivo ("sync: 2 servicios actualizados, 1 artículo publicado").
 

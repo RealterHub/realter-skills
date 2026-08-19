@@ -65,7 +65,9 @@ para decidir si toca crear, actualizar o no hacer nada:
     "remoteId": "42",
     "publishedAt": "2026-08-19T15:04:05Z",
     "lastSyncedAt": "2026-08-19T15:04:05Z",
-    "contentHash": "sha256:…"
+    "contentHash": "sha256:…",
+    "approvedAt": "2026-08-19T15:03:40Z",
+    "approvedHash": "sha256:…"
   },
   "content": { }
 }
@@ -77,10 +79,17 @@ para decidir si toca crear, actualizar o no hacer nada:
 | `publishedAt` | Última publicación confirmada. `null` = existe como borrador remoto |
 | `lastSyncedAt` | Última vez que local y remoto se igualaron |
 | `contentHash` | SHA-256 del bloque `content` en el momento del último sync. Si el hash actual difiere ⇒ hay cambios locales sin publicar (update); si coincide ⇒ al día |
+| `approvedAt` | Momento en que **el asesor aprobó el borrador completo**. Lo escribe la skill solo tras un "sí" explícito sobre el `pieza.md` mostrado entero. `null` = nadie ha aprobado nada todavía |
+| `approvedHash` | SHA-256 del `content` **que se aprobó**. Si el contenido cambió después, la aprobación caducó y hay que volver a mostrar el borrador |
 
 Reglas: las skills recalculan `contentHash` tras cada escritura del json; jamás editan `meta`
 a mano para "cuadrar" estados; ante conflicto (el remoto cambió desde `lastSyncedAt`) se lee el
 remoto, se muestra la diferencia y decide el asesor.
+
+**`approvedAt`/`approvedHash` no son burocracia**: son la memoria de que el asesor vio y aceptó
+*ese* texto. Escribirlos sin su aprobación explícita —o "para desbloquear" un hook— rompe la regla
+de oro del plugin igual que inventar un dato. En Claude Code, además, el hook de pre-publicación
+los exige antes de dejar pasar cualquier `publish_*` (ver README, "Calidad en capas").
 
 ## Flujo de toda skill sobre el workspace
 

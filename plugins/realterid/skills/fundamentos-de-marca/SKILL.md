@@ -84,7 +84,11 @@ lista, qué es texto y los topes (p. ej. `differentiators` máx. 8, `evidence` m
 1. Genera la vista legible completa (plantilla en `templates/pieza.md`) y **muéstrala entera**
    al asesor antes de persistir nada.
 2. Con su aprobación: escribe `pieza.json` (fuente de verdad, conforme al schema) y regenera
-   `pieza.md`. Actualiza `meta.contentHash`.
+   `pieza.md`. Actualiza `meta.contentHash` y, **porque el asesor acaba de aprobar**,
+   `meta.approvedAt` (ahora, ISO 8601) y `meta.approvedHash` (= el `contentHash` recién
+   calculado). Si después cambia cualquier cosa del `content`, la aprobación caduca sola:
+   se vuelve a mostrar el borrador y se vuelven a escribir los dos campos. Nunca los escribas
+   por adelantado ni "para que pase el hook".
 3. **Ofrece publicar** al sitio vía MCP.
 
 ## Publicación vía MCP

@@ -13,7 +13,9 @@
       "additionalProperties": false,
       "properties": {
         "lastSyncedAt": { "type": ["string", "null"], "format": "date-time" },
-        "contentHash": { "type": ["string", "null"], "description": "sha256:<hex> del bloque content en el último sync" }
+        "contentHash": { "type": ["string", "null"], "description": "sha256:<hex> del bloque content en el último sync" },
+        "approvedAt": { "type": ["string", "null"], "format": "date-time", "description": "Momento en que el asesor aprobó el borrador completo. Lo escribe la skill SOLO tras su aprobación explícita; nunca se rellena por adelantado." },
+        "approvedHash": { "type": ["string", "null"], "description": "sha256:<hex> del bloque content aprobado. Si difiere del contenido actual, la aprobación caducó: hay que volver a mostrar el borrador." }
       }
     },
     "content": {
