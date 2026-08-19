@@ -30,6 +30,12 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/gate-writes.mjs\"",
+            "timeout": 15,
+            "statusMessage": "Comprobando que la pieza local esté lista..."
+          },
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/check-brand.mjs\"",
             "timeout": 15,
             "statusMessage": "Contrastando con el brief de marca..."
