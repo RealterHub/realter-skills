@@ -6,9 +6,9 @@
  * de `plugins/realterid/guides/` inyectadas en `references/` para que la skill sea
  * autocontenida fuera del plugin.
  *
- * ⚠️ Los **hooks NO viajan en los zips**, y no es un olvido: `src/hooks/` es un mecanismo de
- * Claude Code (se distribuye en el plugin `realterid-core`), y claude.ai no los ejecuta. Este
- * build solo empaqueta `src/skills/` + `src/guides/`, así que quedan fuera por construcción. La validación
+ * ⚠️ Los **hooks NO viajan en los zips**, y no es un olvido: `hooks/hooks.json` y
+ * `scripts/hooks/` son un mecanismo de Claude Code, y claude.ai no los ejecuta. Este build
+ * solo empaqueta `skills/` + `guides/`, así que quedan fuera por construcción. La validación
  * que allí desaparece la sigue haciendo el MCP del sitio, que valida en todos los clientes
  * (ver "Calidad en capas" en el README).
  *
@@ -22,10 +22,8 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-// Se empaqueta desde la FUENTE (`src/`), no desde `plugins/` — que es generado
-// (ver scripts/build-plugins.mjs). Así los zips no dependen de haber corrido antes ese build.
-const SKILLS_DIR = join(ROOT, 'src', 'skills')
-const GUIDES_DIR = join(ROOT, 'src', 'guides')
+const SKILLS_DIR = join(ROOT, 'plugins', 'realterid', 'skills')
+const GUIDES_DIR = join(ROOT, 'plugins', 'realterid', 'guides')
 const OUT_DIR = join(ROOT, 'dist')
 
 // ---------- CRC32 ----------

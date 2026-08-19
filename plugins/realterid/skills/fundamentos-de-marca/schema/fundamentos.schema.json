@@ -1,0 +1,170 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://realter.dev/skills/fundamentos-de-marca/fundamentos.schema.json",
+  "title": "Fundamentos de marca (pieza.json)",
+  "description": "Brief de marca del asesor para LLMs. Fuente de verdad local; se publica con set_brand_positioning|voice|evidence|market. Documento único por sitio, monolingüe. Ningún campo es obligatorio: lo vacío se reporta en missing_for_brief, jamás se rellena con datos inventados.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["meta", "content"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "description": "Estado de sincronización (ver guides/workspace.md). Este documento no tiene remoteId ni publishedAt: siempre existe en el sitio y siempre está vigente. Tampoco lleva consumerReview (metodo.md §2): el brief no tiene consumidor final —su lector es el LLM— y su estándar de completitud es missing_for_brief, no la lectura como cliente. Por eso las tools set_brand_* también están excluidas del gate de escrituras.",
+      "additionalProperties": false,
+      "properties": {
+        "lastSyncedAt": { "type": ["string", "null"], "format": "date-time" },
+        "contentHash": { "type": ["string", "null"], "description": "sha256:<hex> del bloque content en el último sync" },
+        "approvedAt": { "type": ["string", "null"], "format": "date-time", "description": "Momento en que el asesor aprobó el borrador completo. Lo escribe la skill SOLO tras su aprobación explícita; nunca se rellena por adelantado." },
+        "approvedHash": { "type": ["string", "null"], "description": "sha256:<hex> del bloque content aprobado. Si difiere del contenido actual, la aprobación caducó: hay que volver a mostrar el borrador." }
+      }
+    },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "positioning": {
+          "type": "object",
+          "description": "Bloque Propuesta → set_brand_positioning",
+          "additionalProperties": false,
+          "properties": {
+            "valueProposition": {
+              "type": ["string", "null"],
+              "maxLength": 1500,
+              "description": "Qué hace, para quién y por qué con él. 2-3 frases declarativas, en primera persona del asesor. ESENCIAL (entra en missing_for_brief si falta)."
+            },
+            "idealClient": {
+              "type": ["string", "null"],
+              "maxLength": 1500,
+              "description": "Cliente típico con datos, no adjetivos: quién es, presupuesto, momento de compra, qué le preocupa. ESENCIAL."
+            },
+            "notIdealClient": {
+              "type": ["string", "null"],
+              "maxLength": 1500,
+              "description": "A quién NO le sirve, para que la IA no escriba dirigiéndose a esa persona."
+            },
+            "clientObjections": {
+              "type": "array",
+              "maxItems": 10,
+              "description": "Dudas y objeciones frecuentes del cliente con la respuesta real del asesor.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["objection", "response"],
+                "properties": {
+                  "objection": { "type": "string", "maxLength": 500, "description": "La objeción como la dice el cliente." },
+                  "response": { "type": "string", "maxLength": 500, "description": "La respuesta del asesor, en sus palabras." }
+                }
+              }
+            }
+          }
+        },
+        "voice": {
+          "type": "object",
+          "description": "Bloque Voz → set_brand_voice",
+          "additionalProperties": false,
+          "properties": {
+            "toneDescription": {
+              "type": ["string", "null"],
+              "maxLength": 1500,
+              "description": "3-6 rasgos, cada uno con una línea que lo explique con ejemplo. ESENCIAL."
+            },
+            "addressForm": {
+              "type": ["string", "null"],
+              "enum": ["tu", "usted", "vos", null],
+              "description": "Cómo se dirige a su cliente. Jamás asumir: cambia por país. ESENCIAL."
+            },
+            "wordsToUse": {
+              "type": "array",
+              "maxItems": 25,
+              "items": { "type": "string", "maxLength": 120 },
+              "description": "Palabras y expresiones que SÍ usa, textuales de su mercado. Sin duplicados; un término no puede estar también en wordsToAvoid."
+            },
+            "wordsToAvoid": {
+              "type": "array",
+              "maxItems": 25,
+              "items": { "type": "string", "maxLength": 120 },
+              "description": "Palabras que nunca quiere ver en sus textos. Solo las que él dio."
+            },
+            "samplePhrases": {
+              "type": "array",
+              "maxItems": 10,
+              "items": { "type": "string", "maxLength": 500 },
+              "description": "Frases textuales del asesor, tal como las escribió o dijo. El mejor ejemplo de su voz. NUNCA redactadas por la IA. ESENCIAL."
+            },
+            "contentRules": {
+              "type": ["string", "null"],
+              "maxLength": 1500,
+              "description": "Afirmaciones que la IA nunca debe hacer en su nombre: rentabilidades garantizadas, asesoría legal/fiscal, precios sin autorización, etc."
+            }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "description": "Bloque Diferenciadores y prueba → set_brand_evidence",
+          "additionalProperties": false,
+          "properties": {
+            "differentiators": {
+              "type": "array",
+              "maxItems": 8,
+              "description": "Lo que lo hace distinto, CON la prueba al lado. Sin prueba no entra. ESENCIAL.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["claim", "evidence"],
+                "properties": {
+                  "claim": { "type": "string", "maxLength": 500, "description": "La afirmación, en una línea." },
+                  "evidence": { "type": "string", "minLength": 20, "maxLength": 500, "description": "La prueba concreta: número, año, zona o caso. Mínimo 20 caracteres (regla del MCP)." }
+                }
+              }
+            },
+            "trackRecord": {
+              "type": ["string", "null"],
+              "maxLength": 1500,
+              "description": "Trayectoria en números, una línea por dato: años, operaciones, volumen, reconocimientos. Solo lo sostenible. ESENCIAL."
+            }
+          }
+        },
+        "market": {
+          "type": "object",
+          "description": "Bloque Mercado → set_brand_market",
+          "additionalProperties": false,
+          "properties": {
+            "specialties": {
+              "type": "array",
+              "maxItems": 10,
+              "description": "En qué es especialista de verdad. ESENCIAL.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string", "maxLength": 200 },
+                  "detail": { "type": ["string", "null"], "maxLength": 500, "description": "Qué significa en su caso: ticket típico, tipo de comprador, qué resuelve." }
+                }
+              }
+            },
+            "areasServed": {
+              "type": "array",
+              "maxItems": 15,
+              "description": "Zonas donde trabaja de verdad, en sus palabras (texto libre, no catálogo). ESENCIAL.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string", "maxLength": 200, "description": "Zona, sector o ciudad." },
+                  "note": { "type": ["string", "null"], "maxLength": 500, "description": "Quién compra ahí, qué precio se maneja, qué la distingue." }
+                }
+              }
+            },
+            "typicalPriceRange": {
+              "type": ["string", "null"],
+              "maxLength": 200,
+              "description": "Rango de precios habitual, con moneda. Ej.: \"USD 180.000 – 450.000\"."
+            }
+          }
+        }
+      }
+    }
+  }
+}
