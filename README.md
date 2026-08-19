@@ -50,21 +50,11 @@ en la conversación y publicas directo a tu sitio.
 
 ### ChatGPT
 
-ChatGPT no tiene skills como estas, pero puedes conectar tu sitio como conector MCP (abajo) y
-trabajar tu contenido igual — sin las entrevistas guiadas.
+Estas skills están hechas para los clientes de Claude; en ChatGPT no están disponibles.
 
-## Conecta tu sitio (para que la IA pueda leer y publicar)
-
-1. Entra al panel de tu sitio RealterID → **Inteligencia Artificial → MCP Servers**.
-2. Crea tu clave y marca las capacidades que quieras darle a la IA.
-3. Conéctala:
-
-**En Claude Code:**
-```bash
-claude mcp add --transport http realterid https://TU-DOMINIO.com/mcp --header "Authorization: Bearer TU-CLAVE"
-```
-
-**En claude.ai / ChatGPT:** agrega un conector personalizado con la URL `https://TU-DOMINIO.com/mcp` e inicia sesión cuando te lo pida.
+> **¿Y la conexión con mi sitio?** Para publicar, tu cliente de IA se conecta a tu sitio
+> RealterID — eso se configura una sola vez desde tu panel (**Inteligencia Artificial**), que
+> te guía paso a paso. Las skills te avisan si aún no está conectado.
 
 ## Por dónde empezar
 
