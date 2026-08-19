@@ -1,0 +1,53 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/validate-pieza.mjs\"",
+            "timeout": 15,
+            "statusMessage": "Validando la pieza contra su schema..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__.*__(publish_.*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/gate-publish.mjs\"",
+            "timeout": 15,
+            "statusMessage": "Comprobando aprobación antes de publicar..."
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*__(set_.*|create_.*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/check-brand.mjs\"",
+            "timeout": 15,
+            "statusMessage": "Contrastando con el brief de marca..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/check-workspace.mjs\"",
+            "timeout": 20,
+            "statusMessage": "Repasando el workspace..."
+          }
+        ]
+      }
+    ]
+  }
+}
