@@ -1,0 +1,21 @@
+{
+  "name": "realterid-crear-guion-video",
+  "displayName": "RealterID · Guiones de video",
+  "version": "0.1.0",
+  "description": "Escribe guiones para grabar: reels, TikTok, tours de propiedad, educativos, de zona, testimonios y presentación del asesor — gancho con dos variantes, cuerpo en dos columnas toma↔voz y checklist de tomas. Solo lee el sitio; el guion es un archivo local.",
+  "author": {
+    "name": "Realter"
+  },
+  "license": "MIT",
+  "keywords": [
+    "realterid",
+    "video",
+    "reels",
+    "tiktok",
+    "guion",
+    "marketing"
+  ],
+  "dependencies": [
+    "realterid-core"
+  ]
+}

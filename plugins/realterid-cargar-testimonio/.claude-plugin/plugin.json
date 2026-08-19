@@ -1,0 +1,19 @@
+{
+  "name": "realterid-cargar-testimonio",
+  "displayName": "RealterID · Cargar testimonio",
+  "version": "0.1.0",
+  "description": "Publica testimonios de clientes reales transcribiendo sus palabras — nunca los redacta ni los 'mejora' —, y nacen ocultos hasta que el asesor decide mostrarlos. (Esqueleto: flujo y contrato definidos, desarrollo en curso.)",
+  "author": {
+    "name": "Realter"
+  },
+  "license": "MIT",
+  "keywords": [
+    "realterid",
+    "testimonios",
+    "prueba-social",
+    "inmobiliaria"
+  ],
+  "dependencies": [
+    "realterid-core"
+  ]
+}

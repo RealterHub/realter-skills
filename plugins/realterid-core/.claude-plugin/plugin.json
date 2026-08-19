@@ -1,0 +1,17 @@
+{
+  "name": "realterid-core",
+  "displayName": "RealterID · Core (gates de calidad)",
+  "version": "0.1.0",
+  "description": "Hooks de calidad compartidos por las skills de RealterID: valida cada pieza contra su schema al escribirla, frena publicaciones y escrituras al sitio sin la lectura como cliente y la aprobación del asesor, avisa de palabras prohibidas de su marca y repasa el workspace al cerrar la sesión. No trae skills: instálalo junto a las que uses.",
+  "author": {
+    "name": "Realter"
+  },
+  "license": "MIT",
+  "keywords": [
+    "realter",
+    "realterid",
+    "hooks",
+    "calidad",
+    "inmobiliaria"
+  ]
+}

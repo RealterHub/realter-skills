@@ -1,0 +1,20 @@
+{
+  "name": "realterid-crear-servicio",
+  "displayName": "RealterID · Crear servicio",
+  "version": "0.1.0",
+  "description": "Crea o mejora la landing de un servicio del asesor: entrevista, redacción con su voz de marca y publicación vía MCP (create_service_draft → set_service_* → publish_service).",
+  "author": {
+    "name": "Realter"
+  },
+  "license": "MIT",
+  "keywords": [
+    "realterid",
+    "servicios",
+    "landing",
+    "copywriting",
+    "inmobiliaria"
+  ],
+  "dependencies": [
+    "realterid-core"
+  ]
+}
