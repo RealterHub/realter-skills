@@ -66,6 +66,7 @@ para decidir si toca crear, actualizar o no hacer nada:
     "publishedAt": "2026-08-19T15:04:05Z",
     "lastSyncedAt": "2026-08-19T15:04:05Z",
     "contentHash": "sha256:…",
+    "consumerReview": { "passedAt": "2026-08-19T15:02:10Z", "pasadas": 2, "preguntas": [], "veredicto": "…" },
     "approvedAt": "2026-08-19T15:03:40Z",
     "approvedHash": "sha256:…"
   },
@@ -79,12 +80,37 @@ para decidir si toca crear, actualizar o no hacer nada:
 | `publishedAt` | Última publicación confirmada. `null` = existe como borrador remoto |
 | `lastSyncedAt` | Última vez que local y remoto se igualaron |
 | `contentHash` | SHA-256 del bloque `content` en el momento del último sync. Si el hash actual difiere ⇒ hay cambios locales sin publicar (update); si coincide ⇒ al día |
-| `approvedAt` | Momento en que **el asesor aprobó el borrador completo**. Lo escribe la skill solo tras un "sí" explícito sobre el `pieza.md` mostrado entero. `null` = nadie ha aprobado nada todavía |
+| `consumerReview` | Registro de la **lectura como cliente** (`metodo.md` §2): `{passedAt, pasadas, preguntas:[{pregunta, responde}], veredicto}`. Es el paso previo obligatorio a pedir aprobación |
+| `approvedAt` | Momento en que **el asesor aprobó el borrador completo**. Lo escribe la skill solo tras un "sí" explícito sobre el `pieza.md` mostrado entero, y **siempre después** de `consumerReview.passedAt`. `null` = nadie ha aprobado nada todavía |
 | `approvedHash` | SHA-256 del `content` **que se aprobó**. Si el contenido cambió después, la aprobación caducó y hay que volver a mostrar el borrador |
 
 Reglas: las skills recalculan `contentHash` tras cada escritura del json; jamás editan `meta`
 a mano para "cuadrar" estados; ante conflicto (el remoto cambió desde `lastSyncedAt`) se lee el
 remoto, se muestra la diferencia y decide el asesor.
+
+## El archivo es la memoria de trabajo (flujo archivo → script → MCP)
+
+`metodo.md` §3 es regla dura y esta carpeta es donde se cumple: **la pieza se construye e itera
+aquí, tanda a tanda, y el MCP se toca al final**. Al retomar una sesión se relee el `pieza.json`
+y se sigue donde se quedó; cada respuesta del asesor lo actualiza.
+
+```
+entrevista (tanda a tanda)  →  pieza.json + pieza.md
+      ↓
+lectura como cliente        →  meta.consumerReview
+      ↓
+aprobación del asesor       →  meta.approvedAt + meta.approvedHash
+      ↓
+script MCP (derivado del archivo, mostrado ANTES de ejecutarlo)
+      ↓
+ejecución                   →  meta.remoteId / publishedAt / lastSyncedAt / contentHash
+```
+
+Las **lecturas** del MCP (`get_brand_foundations`, `list_property_options`, `list_geography`,
+`list_media`, `search_*`, `get_*`) sí se llaman al principio: son insumo de la entrevista, no
+escritura. El **script MCP** —la secuencia de llamadas previstas, en orden— se escribe como
+sección del `pieza.md` (se regenera con el resto) para que el asesor vea qué se va a mandar antes
+de mandarlo.
 
 **`approvedAt`/`approvedHash` no son burocracia**: son la memoria de que el asesor vio y aceptó
 *ese* texto. Escribirlos sin su aprobación explícita —o "para desbloquear" un hook— rompe la regla

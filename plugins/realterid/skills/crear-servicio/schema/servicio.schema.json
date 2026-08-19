@@ -17,7 +17,32 @@
         "lastSyncedAt": { "type": ["string", "null"], "format": "date-time" },
         "contentHash": { "type": ["string", "null"], "description": "sha256:<hex> del bloque content en el último sync." },
         "approvedAt": { "type": ["string", "null"], "format": "date-time", "description": "Momento en que el asesor aprobó el borrador completo. Lo escribe la skill SOLO tras su aprobación explícita; nunca se rellena por adelantado." },
-        "approvedHash": { "type": ["string", "null"], "description": "sha256:<hex> del bloque content aprobado. Si difiere del contenido actual, la aprobación caducó: hay que volver a mostrar el borrador." }
+        "approvedHash": { "type": ["string", "null"], "description": "sha256:<hex> del bloque content aprobado. Si difiere del contenido actual, la aprobación caducó: hay que volver a mostrar el borrador." },
+        "consumerReview": {
+          "type": ["object", "null"],
+          "description": "Registro de la LECTURA COMO CLIENTE del método (guides/metodo.md §2): las preguntas del consumidor final que el modelo simuló y si la pieza las responde. `meta.approvedAt` solo es válido si esta revisión existe y es ANTERIOR: la aprobación del usuario presupone que la revisión se hizo y se le comunicó.",
+          "additionalProperties": false,
+          "required": ["passedAt", "preguntas"],
+          "properties": {
+            "passedAt": { "type": "string", "format": "date-time", "description": "Cuándo se completó la lectura como cliente." },
+            "pasadas": { "type": ["integer", "null"], "minimum": 1, "maximum": 5, "description": "Cuántas pasadas de indagación dirigida hicieron falta (tope sano: 2-3)." },
+            "preguntas": {
+              "type": "array",
+              "maxItems": 10,
+              "description": "Las 3-5 preguntas del consumidor real y si la pieza las responde. Las que no, o se resolvieron en una tanda dirigida o quedan listadas para que decida el usuario.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["pregunta", "responde"],
+                "properties": {
+                  "pregunta": { "type": "string", "maxLength": 300 },
+                  "responde": { "type": "boolean" }
+                }
+              }
+            },
+            "veredicto": { "type": ["string", "null"], "maxLength": 1000, "description": "Lo que el modelo le dijo al usuario tras leerla como cliente ('leyéndolo como comprador remoto, me faltaría...')." }
+          }
+        }
       }
     },
     "content": {

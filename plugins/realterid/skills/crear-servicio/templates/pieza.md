@@ -60,6 +60,19 @@
 - meta_title: {{content.seo.metaTitle | "(cae al título)"}}
 - meta_description: {{content.seo.metaDescription | "(cae al extracto)"}}
 
+## Script MCP (lo que se va a mandar)
+
+*Se muestra al asesor ANTES de ejecutar nada (metodo.md §3). Se regenera desde el archivo.*
+
+```
+{{secuencia de llamadas previstas, en orden, con sus valores clave — p. ej.
+ 1. create_*_draft(...) → id
+ 2. set_*(...)
+ 3. publish_*(id)}}
+```
+
+*Lectura como cliente*: {{meta.consumerReview.passedAt | "pendiente"}}{{#if meta.consumerReview}} · {{meta.consumerReview.pasadas}} pasada(s) · {{meta.consumerReview.veredicto}}{{/if}}
+
 ---
 
 *Pendiente para publicar*: {{missing_for_publish como lista legible, o "nada — listo para publicar"}}

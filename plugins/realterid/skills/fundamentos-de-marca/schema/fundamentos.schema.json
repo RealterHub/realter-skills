@@ -9,7 +9,7 @@
   "properties": {
     "meta": {
       "type": "object",
-      "description": "Estado de sincronización (ver guides/workspace.md). Este documento no tiene remoteId ni publishedAt: siempre existe en el sitio y siempre está vigente.",
+      "description": "Estado de sincronización (ver guides/workspace.md). Este documento no tiene remoteId ni publishedAt: siempre existe en el sitio y siempre está vigente. Tampoco lleva consumerReview (metodo.md §2): el brief no tiene consumidor final —su lector es el LLM— y su estándar de completitud es missing_for_brief, no la lectura como cliente. Por eso las tools set_brand_* también están excluidas del gate de escrituras.",
       "additionalProperties": false,
       "properties": {
         "lastSyncedAt": { "type": ["string", "null"], "format": "date-time" },

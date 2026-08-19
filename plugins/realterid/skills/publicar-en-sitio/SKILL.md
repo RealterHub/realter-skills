@@ -14,6 +14,20 @@ version: 0.1.0
 > **ESQUELETO (v0.1.0)** — flujo y contrato definidos; falta el desarrollo completo
 > (ver TODO al final).
 
+## Método (obligatorio)
+
+Esta skill sigue el **método común del plugin**: `guides/metodo.md` en Claude Code, o
+`references/metodo.md` en el zip de claude.ai. Léelo antes de la primera pregunta. En corto:
+
+1. **Propón para que confirme.** No le pidas al asesor que produzca en frío: deduce lo plausible
+   del contexto y que él confirme, corrija o niegue. **Nada deducido se registra sin su "sí".**
+2. **Evalúa como el consumidor final** antes de dar la pieza por terminada: simula sus 3-5
+   preguntas, mira cuáles no responde el borrador y haz una tanda dirigida a eso (máx. 2-3
+   pasadas; después, lista lo pendiente y decide el asesor).
+3. **Archivo primero, MCP al final.** Todo se construye en la pieza local; las escrituras al MCP
+   se ejecutan al final, desde el script derivado del archivo y aprobado por el asesor. Las
+   **lecturas** (`get_*`, `list_*`, `search_*`) sí van al principio: son insumo, no escritura.
+
 ## Propósito
 
 El paso final del workspace (`guides/workspace.md`): mirar todas las piezas locales, decidir

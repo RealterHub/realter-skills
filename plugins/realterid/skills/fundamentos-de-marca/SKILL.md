@@ -17,6 +17,20 @@ fundacional: todas las demás leen este brief (`get_brand_foundations`) antes de
 No es contenido del sitio público — nunca se renderiza; es la ficha que enseña a la IA a escribir
 *como el asesor*.
 
+## Método (obligatorio)
+
+Esta skill sigue el **método común del plugin**: `guides/metodo.md` en Claude Code, o
+`references/metodo.md` en el zip de claude.ai. Léelo antes de la primera pregunta. En corto:
+
+1. **Propón para que confirme.** No le pidas al asesor que produzca en frío: deduce lo plausible
+   del contexto y que él confirme, corrija o niegue. **Nada deducido se registra sin su "sí".**
+2. **Evalúa como el consumidor final** antes de dar la pieza por terminada: simula sus 3-5
+   preguntas, mira cuáles no responde el borrador y haz una tanda dirigida a eso (máx. 2-3
+   pasadas; después, lista lo pendiente y decide el asesor).
+3. **Archivo primero, MCP al final.** Todo se construye en la pieza local; las escrituras al MCP
+   se ejecutan al final, desde el script derivado del archivo y aprobado por el asesor. Las
+   **lecturas** (`get_*`, `list_*`, `search_*`) sí van al principio: son insumo, no escritura.
+
 ## Regla de oro (aplica a todas las skills de este plugin)
 
 **NUNCA inventes datos del asesor.** Lo que no haya dicho, se le pregunta; lo que no dé, queda
@@ -62,6 +76,10 @@ Principios:
 - El trato (tú/usted/vos) **jamás se asume**: cambia por país y es lo primero que delata un texto ajeno.
 - Acepta respuestas desordenadas: el asesor puede soltar en una respuesta material de tres bloques.
   Tú clasificas; no lo obligues a seguir tu orden.
+- **El inventario también informa el brief**: si el asesor ya cargó propiedades con
+  `cargar-propiedad`, sus zonas y tipologías reales son material de `specialties` y
+  `areas_served` — propónselas para que confirme ("veo que todo lo tuyo es preventa en dos
+  sectores, ¿lo pongo así?"), en vez de preguntarle en abstracto en qué es especialista.
 
 ## La compilación (lo que hace distinta a esta skill)
 
