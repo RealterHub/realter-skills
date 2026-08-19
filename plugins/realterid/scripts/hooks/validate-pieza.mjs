@@ -12,9 +12,8 @@
  *
  * Nunca rompe la sesión: cualquier fallo interno sale con exit 0 y sin ruido.
  */
-import { basename } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
 
 import { validate, keywordsNoSoportadas } from './lib/schema.mjs'
 import { findWorkspace, pieceInfo, readHookInput, readJson } from './lib/workspace.mjs'
