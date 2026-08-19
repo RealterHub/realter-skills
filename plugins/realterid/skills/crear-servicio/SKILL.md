@@ -28,8 +28,11 @@ está la skill — pero todo hecho dentro de la redacción salió de su boca.
    ofrece correr antes la skill `fundamentos-de-marca` (o al menos pregunta trato y vocabulario
    mínimos en esta sesión).
 2. **Guías**: `storytelling.md` (el editorial es una historia comprimida), `copywriting.md`
-   (específico > superlativo, CTA que dice qué pasa después) y `seo-basico.md` (una landing =
-   una intención de búsqueda; excerpt ≤160; 5-8 FAQs long-tail; editorial 300-500 palabras).
+   (específico > superlativo, CTA que dice qué pasa después), `seo-basico.md` (una landing =
+   una intención de búsqueda; excerpt ≤160; 5-8 FAQs long-tail; editorial 300-500 palabras) y
+   `entrevista-biografica.md` — cuando una propuesta de valor se quede sin prueba, la prueba
+   casi siempre es biográfica (qué estudió, de dónde viene, cuántas operaciones de este tipo
+   lleva) y hay que excavarla con sus técnicas, no esperar a que la ofrezca.
    En Claude Code están en `guides/` del plugin; en el zip de claude.ai, en `references/`.
 3. **Workspace** (`workspace.md`): la pieza vive en `servicios/<slug>/pieza.json` + `pieza.md`.
    Si ya existe la carpeta del servicio, es una edición: carga el json y, si tiene `meta.remoteId`,

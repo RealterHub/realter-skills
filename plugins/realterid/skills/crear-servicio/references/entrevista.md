@@ -20,6 +20,10 @@ nombres de campos. Las guías mandan sobre el estilo de pregunta: anécdotas y c
 
 - "Dame 2 o 3 razones por las que este servicio contigo y no con otro — y la prueba de cada una (número, año, caso, zona)."
 - Si sale un adjetivo: "¿Cómo se ve eso en una operación real? Cuéntame una."
+- Si la razón se queda sin prueba, excava en su biografía con `entrevista-biografica.md`: "¿qué
+  estudiaste?", "¿qué hacías antes de bienes raíces?", "¿cuántas operaciones de este tipo llevas?".
+  Devuélvelo en espejo y pide confirmación ("vienes de construcción → sabes leer una obra en
+  marcha; ¿lo usamos como razón?"). Lo que no confirme como suyo, no entra.
 
 ## Tanda 4 — Cómo funciona (processSteps)
 

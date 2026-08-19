@@ -26,8 +26,10 @@ tratado como un hecho por todos los modelos que lo lean.
 
 ## Antes de empezar
 
-1. **Lee las guías**: `references/storytelling.md` y `references/copywriting.md` si existen en esta
-   skill (build para claude.ai) o `guides/` del plugin (Claude Code). Moldean qué preguntar.
+1. **Lee las guías**: `storytelling.md`, `copywriting.md` y **`entrevista-biografica.md`** — en
+   `guides/` del plugin (Claude Code) o en `references/` de esta skill (build para claude.ai).
+   Moldean qué preguntar. La biográfica manda en todo lo que sea la persona del asesor
+   (trayectoria, formación, origen, carrera previa): es material que **nunca sale solo**.
 2. **Workspace**: aplica `guides/workspace.md` (o `references/workspace.md`). Esta pieza vive en
    `perfil/fundamentos-de-marca/pieza.json`. Sin filesystem → modo degradado: trabaja en la
    conversación y publica directo vía MCP.
@@ -51,6 +53,12 @@ Principios:
   WhatsApp a un cliente" enseña más que "describe tu tono".
 - Toda afirmación de diferenciación necesita su **prueba** (número, año, zona, caso). Sin prueba,
   pregunta por ella; si no la hay, el diferenciador no entra.
+- **Excava la biografía, no la esperes** (`entrevista-biografica.md`): el asesor no menciona por su
+  cuenta que estudió ingeniería, que viene de banca o que lleva 12 años en la misma zona — para él
+  es su vida normal, y para el cliente es lo que decide. Barre el checklist de territorios (origen,
+  formación, carrera previa, años y números, hitos, reconocimientos, idiomas, origin story, qué le
+  dicen sus clientes), pregunta por episodios concretos —nunca "háblame de ti"— y usa el **espejo**:
+  devuelve el hecho en lenguaje de valor y pide confirmación antes de escribirlo.
 - El trato (tú/usted/vos) **jamás se asume**: cambia por país y es lo primero que delata un texto ajeno.
 - Acepta respuestas desordenadas: el asesor puede soltar en una respuesta material de tres bloques.
   Tú clasificas; no lo obligues a seguir tu orden.
