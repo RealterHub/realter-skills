@@ -102,6 +102,26 @@ los exige antes de dejar pasar cualquier `publish_*` (ver README, "Calidad en ca
    ("servicio compra-sobre-planos: editorial y FAQs"); si no es repo, ofrecer `git init` una vez.
    Nunca hacer push sin que el asesor lo pida.
 
+## Hash canónico de `content`
+
+`contentHash` y `approvedHash` se calculan **igual en todas las skills** (si no, dos skills
+concluirían cosas distintas sobre la misma pieza): JSON del bloque `content` con las **claves
+ordenadas alfabéticamente en todos los niveles**, sin espacios ni saltos de línea, codificado en
+UTF-8; SHA-256 en hexadecimal minúscula; prefijo `sha256:`. Los arrays conservan su orden (es
+información: el orden de las FAQs o de los pasos importa). La implementación de referencia está
+en `scripts/hooks/lib/workspace.mjs` del plugin (`canonicalJson` + `contentHash`).
+
+## Calidad en capas (dónde se comprueba qué)
+
+- **El MCP del sitio valida siempre**, en todos los clientes: requeridos, topes, enums, ids
+  ajenos y publicación explícita. Es la autoridad; lo que rechaza, no se publica.
+- **En Claude Code hay además hooks** del plugin: validan la `pieza.json` contra su schema en
+  cuanto se escribe, frenan cualquier `publish_*` sin aprobación vigente y repasan el workspace
+  al cerrar la sesión. **claude.ai y ChatGPT no ejecutan hooks** — allí esta guía y el MCP son
+  todo lo que hay, así que las reglas de aquí se cumplen igual, sin red de seguridad.
+- Un hook que avisa es información, no un permiso: nunca se "arregla" un aviso escribiendo un
+  dato que el asesor no dio, ni marcando una aprobación que no ocurrió.
+
 ## Modo degradado (claude.ai, ChatGPT web — sin sistema de archivos)
 
 Las mismas skills funcionan sin carpeta:

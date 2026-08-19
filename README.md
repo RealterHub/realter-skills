@@ -32,6 +32,33 @@ inyectan en `references/` de cada zip para que las skills sean autocontenidas en
 | `entrevista-biografica.md` | Desbloquear lo que el asesor **no cuenta solo**: origen, formación, carrera previa, hitos, idiomas. Preguntas por episodios, checklist de territorios, técnica del espejo y prohibición de inducir a inventar. |
 | `workspace.md` | Convención de la carpeta local del asesor: `pieza.json` como fuente de verdad, `pieza.md` legible, bloque `meta` para el sync. |
 
+## Calidad en capas (qué garantiza cada una)
+
+Tres capas, con alcances distintos a propósito. La de abajo es la única que existe siempre.
+
+| Capa | Dónde corre | Qué garantiza | Dónde NO está |
+| --- | --- | --- | --- |
+| **MCP del sitio** (autoridad) | Servidor del asesor, en toda llamada | Validación real y aislamiento por cuenta: requeridos (`missing_for_publish`), topes, enums, ids ajenos ⇒ `not_found`, borrador/publicación explícita. Lo que el MCP rechaza, no se publica. | En ningún sitio: aplica a Claude Code, claude.ai y ChatGPT por igual |
+| **Hooks del plugin** (red de seguridad local) | Claude Code, al usar el plugin | Feedback inmediato sobre el **workspace local**: la `pieza.json` valida contra su schema al escribirla; ningún `publish_*` pasa sin aprobación vigente del asesor; aviso de palabras prohibidas del brief; repaso del workspace al cerrar | claude.ai y ChatGPT **no ejecutan hooks** (por eso no viajan en los zips) |
+| **Skills** (instrucción) | Todos los clientes | Cómo entrevistar, qué preguntar, qué no inventar, mostrar el borrador completo antes de publicar | — |
+
+Los hooks **no relajan** nada: son un atajo al error, no un permiso. Ninguna capa autoriza a
+escribir un dato que el asesor no haya dado.
+
+Implementación: `plugins/realterid/hooks/hooks.json` (detectado por convención al habilitar el
+plugin) + `plugins/realterid/scripts/hooks/*.mjs` (Node puro, sin dependencias, cross-platform).
+
+| Hook | Evento · matcher | Qué hace |
+| --- | --- | --- |
+| `validate-pieza.mjs` | `PostToolUse` · `Write\|Edit` | Si el archivo escrito es una `pieza.json` de un workspace RealterID, la valida contra el `schema/` de su skill y **devuelve los errores al modelo** para que corrija en el mismo turno |
+| `gate-publish.mjs` | `PreToolUse` · `mcp__.*__(publish_.*)` | **Deniega** publicar si la pieza local no valida, no tiene `meta.approvedAt` o su `approvedHash` caducó (el contenido cambió tras la aprobación). Sin copia local, avisa y deja pasar |
+| `check-brand.mjs` | `PreToolUse` · `mcp__.*__(set_.*\|create_.*)` | Aviso **no bloqueante**: palabras de `wordsToAvoid` del brief local en el payload, o ausencia de brief (sugiere `fundamentos-de-marca`, una vez por sesión) |
+| `check-workspace.mjs` | `Stop` | Repaso al cerrar: piezas que no validan, `pieza.md` sin regenerar, aprobaciones caducadas y cambios sin commitear. **Nunca commitea** ni retiene el cierre |
+
+Ninguno rompe la sesión: ante cualquier fallo interno salen en silencio con éxito. Contrato de
+hooks (ubicación, `${CLAUDE_PLUGIN_ROOT}`, campos de stdin, `permissionDecision`/`decision`,
+`stop_hook_active`) verificado contra la documentación oficial de Claude Code el 2026-08-19.
+
 ## Instalación
 
 ### Claude Code (recomendado)
@@ -79,6 +106,8 @@ toca crear, actualizar o nada. Detalle: `plugins/realterid/guides/workspace.md`.
 plugins/realterid/
 ├── .claude-plugin/plugin.json
 ├── guides/                          # guías compartidas (se inyectan en los zips)
+├── hooks/hooks.json                 # hooks de calidad (solo Claude Code; NO van a los zips)
+├── scripts/hooks/                   # sus scripts .mjs + lib/ (validador y workspace)
 └── skills/<skill>/                  # SKILL.md + schema/ + templates/ + references/
 scripts/build-zips.mjs               # build para claude.ai (Node puro, sin deps)
 ```

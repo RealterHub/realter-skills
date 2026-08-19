@@ -49,8 +49,8 @@ asesor. Nunca publica en bloque sin listar antes qué va a pasar.
 
 ## TODO para completar esta skill
 
-- [ ] Algoritmo de hash normalizado (JSON canónico) documentado en `references/`, idéntico
-      al que usan las demás skills al escribir `meta.contentHash`.
+- [x] Algoritmo de hash normalizado (JSON canónico): documentado en `guides/workspace.md`
+      e implementado en `scripts/hooks/lib/workspace.mjs` del plugin.
 - [ ] Mapa tipo→ciclo de tools (qué set_* corresponde a cada bloque de cada schema).
 - [ ] Detección de conflicto remoto por tipo (qué campos comparar de cada `get_*`).
 - [ ] Estrategia de reintentos y de errores parciales (una pieza falla, el resto sigue).

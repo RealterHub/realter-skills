@@ -6,6 +6,12 @@
  * de `plugins/realterid/guides/` inyectadas en `references/` para que la skill sea
  * autocontenida fuera del plugin.
  *
+ * ⚠️ Los **hooks NO viajan en los zips**, y no es un olvido: `hooks/hooks.json` y
+ * `scripts/hooks/` son un mecanismo de Claude Code, y claude.ai no los ejecuta. Este build
+ * solo empaqueta `skills/` + `guides/`, así que quedan fuera por construcción. La validación
+ * que allí desaparece la sigue haciendo el MCP del sitio, que valida en todos los clientes
+ * (ver "Calidad en capas" en el README).
+ *
  * Node puro, sin dependencias (zlib para deflate, CRC32 propio).
  * Uso: node scripts/build-zips.mjs   → escribe en dist/
  */
