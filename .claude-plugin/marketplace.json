@@ -1,0 +1,13 @@
+{
+  "name": "realter-skills",
+  "owner": {
+    "name": "Realter"
+  },
+  "plugins": [
+    {
+      "name": "realterid",
+      "source": "./plugins/realterid",
+      "description": "Skills para que el asesor inmobiliario gestione el contenido de su sitio RealterID desde su cliente de IA: marca, servicios, blog, testimonios y páginas."
+    }
+  ]
+}
