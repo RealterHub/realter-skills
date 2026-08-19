@@ -1,0 +1,168 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://realter.dev/skills/crear-copies-sociales/copies-sociales.schema.json",
+  "title": "Pack de copies sociales (pieza.json)",
+  "description": "Pack de copies de redes sociales para UNA propiedad ya cargada en el sitio del asesor. Fuente de verdad local; NUNCA se publica vía MCP — esta skill solo LEE (get_brand_foundations, get_property/search_properties, list_media). El entregable es este archivo y su pieza.md: el asesor copia y pega el copy donde vaya a postear. Los ids (propertyId, mediaId) se resuelven SIEMPRE con las tools de lectura del MCP; nunca se inventan. Lo deducido por el modelo (ángulos, ganchos) no se escribe aquí hasta que el asesor lo confirma.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["meta", "content"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "description": "Estado de esta pieza (ver references/workspace.md). A diferencia de una propiedad o un servicio, un pack de copies no se sincroniza con el sitio: no lleva remoteId, publishedAt ni lastSyncedAt porque no hay nada que publicar ni despublicar vía MCP. Sí lleva contentHash/consumerReview/approvedAt/approvedHash: el pack se da por terminado exactamente con el mismo método que cualquier otra pieza — lectura como consumidor (aquí, la audiencia que scrollea) y aprobación explícita del asesor.",
+      "additionalProperties": false,
+      "properties": {
+        "contentHash": {
+          "type": ["string", "null"],
+          "description": "sha256:<hex> del bloque content, recalculado tras cada escritura del archivo (algoritmo canónico en references/workspace.md)."
+        },
+        "approvedAt": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Momento en que el asesor aprobó el pack completo. Lo escribe la skill SOLO tras su 'sí' explícito sobre el pieza.md mostrado entero, y SIEMPRE después de consumerReview.passedAt. null = todavía no aprobado."
+        },
+        "approvedHash": {
+          "type": ["string", "null"],
+          "description": "sha256:<hex> del content que se aprobó. Si el contenido cambió después, la aprobación caducó y hay que volver a mostrar el pack."
+        },
+        "consumerReview": {
+          "type": ["object", "null"],
+          "description": "Registro de la lectura como consumidor final del método (metodo.md §2). Aquí el 'consumidor' es la AUDIENCIA QUE SCROLLEA: la pregunta no es si el dato es correcto, es si el gancho detiene el pulgar y si el CTA deja claro qué hacer. Paso previo obligatorio a pedir aprobación.",
+          "additionalProperties": false,
+          "required": ["passedAt", "preguntas"],
+          "properties": {
+            "passedAt": { "type": "string", "format": "date-time" },
+            "pasadas": { "type": ["integer", "null"], "minimum": 1, "maximum": 5, "description": "Cuántas pasadas de indagación dirigida hicieron falta (tope sano: 2-3)." },
+            "preguntas": {
+              "type": "array",
+              "maxItems": 10,
+              "description": "Las 3-5 preguntas de la audiencia que scrollea y si el pack las responde (ver references/entrevista.md para el banco).",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["pregunta", "responde"],
+                "properties": {
+                  "pregunta": { "type": "string", "maxLength": 300 },
+                  "responde": { "type": "boolean" }
+                }
+              }
+            },
+            "veredicto": { "type": ["string", "null"], "maxLength": 1000, "description": "Lo que el modelo le dijo al asesor tras leerlo como alguien que scrollea ('el gancho de Instagram para en seco, pero el de TikTok se lee como ficha; lo reescribí')." }
+          }
+        }
+      }
+    },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "property": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Referencia de SOLO LECTURA a la propiedad de la que nace este pack (get_property / search_properties). Esta skill nunca escribe en la propiedad.",
+          "properties": {
+            "propertyId": { "type": ["string", "null"], "description": "Id de la propiedad. REQUERIDO para cerrar el pack." },
+            "slug": { "type": ["string", "null"], "description": "Slug del sitio, para armar la carpeta propiedades/<slug>/social/… y enlazar la ficha." },
+            "title": { "type": ["string", "null"], "maxLength": 200, "description": "Título de la ficha al momento de generar el pack (evita re-consultar el MCP solo para leer el pieza.md)." },
+            "operationType": { "type": ["string", "null"], "enum": ["sale", "rental", "transfer", "vacationRental", null], "description": "Copiado de la propiedad; da contexto al tono (venta vs renta vacacional no se escriben igual)." }
+          }
+        },
+        "objective": {
+          "type": ["string", "null"],
+          "enum": ["captacion-compradores", "captacion-propietarios", "branding", null],
+          "description": "Objetivo del pack: vender ESTA propiedad a compradores, usarla como prueba social para captar propietarios, o branding del asesor con la propiedad como ejemplo. Cambia el ángulo por completo (references/mejores-practicas-social.md §8). Lo confirma el asesor; nunca se asume por defecto. REQUERIDO. Da nombre a la carpeta del pack: propiedades/<slug>/social/<fecha>-<objetivo>/."
+        },
+        "audience": {
+          "type": ["string", "null"],
+          "maxLength": 500,
+          "description": "A quién va dirigido ESTE post, en palabras del asesor (p. ej. 'parejas jóvenes que compran su primer apartamento' o 'propietarios de la misma torre que quieren vender'). Es lo que la ficha de la propiedad no dice: se pregunta siempre. REQUERIDO."
+        },
+        "angle": {
+          "type": ["string", "null"],
+          "maxLength": 500,
+          "description": "El ángulo/historia elegido para este pack entre los que el modelo propuso desde la ficha y el brief (p. ej. 'la vista desde la terraza', 'a 10 minutos del colegio'). Confirmado por el asesor, no impuesto por el modelo."
+        },
+        "hookVariants": {
+          "type": "array",
+          "maxItems": 4,
+          "description": "Variantes A/B del gancho de primera línea, para que el asesor pruebe cuál para más el scroll. Nada deducido entra aquí sin que el asesor haya visto y aceptado la lista de candidatos.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text"],
+            "properties": {
+              "text": { "type": "string", "maxLength": 300 },
+              "note": { "type": ["string", "null"], "maxLength": 300, "description": "Qué fórmula de gancho usa (cifra específica, contraste, pregunta directa al lector) — mejores-practicas-social.md §1." }
+            }
+          }
+        },
+        "platforms": {
+          "type": "array",
+          "maxItems": 5,
+          "description": "Un bloque de copy por cada plataforma que el asesor eligió trabajar. REQUERIDO al menos una plataforma para cerrar el pack. El copy NO se pega igual entre plataformas: cada una adapta apertura, ritmo y CTA (mejores-practicas-social.md §3).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["platform"],
+            "properties": {
+              "platform": { "type": "string", "enum": ["instagram", "facebook", "tiktok", "linkedin", "x"], "description": "Plataforma de este bloque." },
+              "format": { "type": ["string", "null"], "enum": ["caption", "reel", "carousel", "story", null], "description": "Formato dentro de la plataforma. 'carousel' es el único que usa slides[]." },
+              "hook": { "type": ["string", "null"], "maxLength": 300, "description": "La primera línea (o los primeros 2-3 segundos hablados/en pantalla, si es video) para ESTA plataforma. REQUERIDO por plataforma para cerrar el pack." },
+              "body": { "type": ["string", "null"], "maxLength": 3000, "description": "El resto del copy: vida/experiencia y detalles clave CONFIRMADOS, con la estructura gancho→vida→detalles→CTA. REQUERIDO por plataforma." },
+              "cta": { "type": ["string", "null"], "maxLength": 200, "description": "Qué hace el lector después (DM, WhatsApp, agendar visita). Dice el siguiente paso, nunca 'Contactar' o 'Más información'. REQUERIDO por plataforma." },
+              "hashtags": {
+                "type": "array",
+                "maxItems": 15,
+                "description": "3-5 recomendados: uno genérico del sector, uno o dos de formato/categoría, uno o dos locales reales (nunca inventados). No un bloque de 30 genéricos.",
+                "items": { "type": "string", "maxLength": 50 }
+              },
+              "slides": {
+                "type": "array",
+                "maxItems": 10,
+                "description": "Solo si format='carousel'. Copy de cada slide — un trabajo por slide (portada+gancho, features uno por slide, entorno, CTA final).",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["order", "text"],
+                  "properties": {
+                    "order": { "type": "integer", "minimum": 1, "description": "Posición del slide, empezando en 1." },
+                    "text": { "type": "string", "maxLength": 300 }
+                  }
+                }
+              },
+              "mediaSuggestion": {
+                "type": "array",
+                "maxItems": 10,
+                "description": "Fotos de la biblioteca del asesor (list_media) sugeridas para esta pieza, con el porqué. Solo sugerencia: esta skill nunca sube ni asigna medios (no llama upload_image ni set_property_*).",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["mediaId"],
+                  "properties": {
+                    "mediaId": { "type": "string", "description": "Id de list_media." },
+                    "note": { "type": ["string", "null"], "maxLength": 300, "description": "Por qué esta foto en esta pieza (p. ej. 'portada del carrusel: mejor luz de las 6')." }
+                  }
+                }
+              },
+              "notes": { "type": ["string", "null"], "maxLength": 500, "description": "Notas de producción propias del formato: duración sugerida de un reel, ritmo del guion hablado, si hace falta voz en off, si el carrusel necesita texto superpuesto." }
+            }
+          }
+        },
+        "pending": {
+          "type": "array",
+          "maxItems": 20,
+          "description": "Preguntas de la audiencia que quedaron sin responder tras el tope de pasadas, o datos/ángulos que el asesor no confirmó. No se descarta el pack por esto: se lista y decide el asesor si publica así.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["question"],
+            "properties": {
+              "question": { "type": "string", "maxLength": 300 },
+              "guess": { "type": ["string", "null"], "maxLength": 300, "description": "La deducción que quedó SIN confirmar. Vive aquí para no acabar en el copy." }
+            }
+          }
+        }
+      }
+    }
+  }
+}
