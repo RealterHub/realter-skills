@@ -19,9 +19,18 @@ oro de todas: **jamás inventar datos del asesor** — lo que no dé, se pregunt
 | `editar-paginas` | Las seis páginas del sitio: heros, secciones, CTAs, SEO, con publicación explícita. | 🚧 Esqueleto |
 | `publicar-en-sitio` | Sincroniza el workspace local con el sitio: decide crear/actualizar/al día por pieza y publica con aprobación. | 🚧 Esqueleto |
 
-Guías compartidas del plugin (`plugins/realterid/guides/`): `storytelling.md`, `copywriting.md`,
-`seo-basico.md` y `workspace.md` — prácticas universales que moldean qué preguntan y cómo
-redactan todas las skills.
+## Guías compartidas (`plugins/realterid/guides/`)
+
+Prácticas universales que moldean **qué preguntan** y **cómo redactan** todas las skills. Se
+inyectan en `references/` de cada zip para que las skills sean autocontenidas en claude.ai.
+
+| Guía | Para qué |
+| --- | --- |
+| `storytelling.md` | La historia buena ya ocurrió: problema → decisión → resultado, con anécdotas reales del asesor. |
+| `copywriting.md` | Texto que hace que un desconocido escriba: específico > superlativo, trato del brief, CTA que dice qué pasa después. |
+| `seo-basico.md` | Una página = una intención de búsqueda; títulos, excerpts y FAQs long-tail sin relleno. |
+| `entrevista-biografica.md` | Desbloquear lo que el asesor **no cuenta solo**: origen, formación, carrera previa, hitos, idiomas. Preguntas por episodios, checklist de territorios, técnica del espejo y prohibición de inducir a inventar. |
+| `workspace.md` | Convención de la carpeta local del asesor: `pieza.json` como fuente de verdad, `pieza.md` legible, bloque `meta` para el sync. |
 
 ## Instalación
 
