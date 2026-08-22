@@ -1,5 +1,5 @@
 ---
-name: cotizacion-proyecto-propiedad
+name: project-property-quotation
 description: >-
   Genera cotizaciones inmobiliarias validadas en HTML y PDF para unidades de proyecto
   o propiedades listas/reventa con datos de RealterHub. Úsala al calcular, preparar
@@ -16,31 +16,31 @@ exclusiva sobre estado, preguntas, normalización MCP, cálculos, validaciones, 
 Ejecuta todos los comandos con esta carpeta de skill como directorio de trabajo. Inicializa el estado:
 
 ```bash
-node scripts/quotation.mjs init --state cotizacion.json --date YYYY-MM-DD
+node scripts/quotation.mjs init --state quotation.json --date YYYY-MM-DD
 ```
 
-Ejecuta `next --state cotizacion.json` y procesa únicamente la transición devuelta. Repite hasta
+Ejecuta `next --state quotation.json` y procesa únicamente la transición devuelta. Repite hasta
 `ready_to_validate`.
 
 - Entrega la respuesta MCP completa y sin modificar mediante
-  `ingest --state cotizacion.json --resource RECURSO --input respuesta.json`.
+  `ingest --state quotation.json --resource RECURSO --input response.json`.
 - Formula exactamente la pregunta devuelta y registra la respuesta mediante
-  `answer --state cotizacion.json --question CODIGO --value VALOR`.
+  `answer --state quotation.json --question CODIGO --value VALOR`.
 - Si el script devuelve opciones, no selecciones por el usuario.
 - Si devuelve un bloqueo, detente y comunica ese bloqueo.
 
 Valida y genera:
 
 ```bash
-node scripts/quotation.mjs validate --state cotizacion.json
-node scripts/quotation.mjs generate --state cotizacion.json --output-dir salida
+node scripts/quotation.mjs validate --state quotation.json
+node scripts/quotation.mjs generate --state quotation.json --output-dir output
 ```
 
 Entrega las rutas del HTML y PDF generados.
 
 ## Invariantes
 
-- No edites `cotizacion.json` directamente ni calcules importes, fechas o cuotas.
+- No edites `quotation.json` directamente ni calcules importes, fechas o cuotas.
 - Obtén organización, logo y colaborador del contexto autenticado; no los infieras ni los solicites
   como texto libre.
 - Usa exclusivamente tools de lectura de RealterHub. No crees ni modifiques planes, deals, cobros,

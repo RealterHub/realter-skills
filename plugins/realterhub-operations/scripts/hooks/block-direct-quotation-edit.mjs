@@ -8,7 +8,7 @@ async function readStdin() {
 
 const input = await readStdin();
 const file = String(input?.tool_input?.file_path ?? "");
-if (/(^|\/)(cotizacion|.+\.quotation)\.json$/i.test(file)) {
+if (/(^|\/)(quotation|.+\.quotation)\.json$/i.test(file)) {
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PreToolUse",

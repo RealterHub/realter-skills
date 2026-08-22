@@ -194,7 +194,7 @@ test("exposes only one deterministic transition at a time", () => {
 
 test("the workflow owns state changes and rejects out-of-order answers", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "realterhub-quotation-"));
-  const state = path.join(directory, "cotizacion.json");
+  const state = path.join(directory, "quotation.json");
   const rawContext = path.join(directory, "context.json");
   const rawContact = path.join(directory, "contact.json");
   try {
@@ -222,7 +222,7 @@ test("the workflow owns state changes and rejects out-of-order answers", async (
 
 test("rejects direct changes to a sealed quotation state", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "realterhub-quotation-integrity-"));
-  const state = path.join(directory, "cotizacion.json");
+  const state = path.join(directory, "quotation.json");
   try {
     await initializeState(state, "2026-01-15");
     const packet = JSON.parse(await readFile(state, "utf8"));

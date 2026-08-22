@@ -1,5 +1,5 @@
 {
-  "name": "realterhub-operaciones",
+  "name": "realterhub-operations",
   "version": "0.1.0",
   "description": "Genera cotizaciones inmobiliarias deterministas con datos obtenidos de RealterHub.",
   "author": {

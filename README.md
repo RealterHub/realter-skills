@@ -15,8 +15,8 @@ tu aprobación, siempre.
 ## Qué puedes hacer
 
 El marketplace se organiza por producto. `realterid` gestiona el contenido del sitio del asesor.
-`realterhub-operaciones` usa las tools del MCP de la cuenta RealterHub del usuario; su primera
-skill, `cotizacion-proyecto-propiedad`, genera cotizaciones con proyección de pagos para unidades de
+`realterhub-operations` usa las tools del MCP de la cuenta RealterHub del usuario; su primera
+skill, `project-property-quotation`, genera cotizaciones con proyección de pagos para unidades de
 proyecto y propiedades listas o de reventa.
 
 ### RealterID
@@ -46,13 +46,13 @@ El repositorio incluye manifiestos nativos para ambos clientes: `.codex-plugin/p
 claude plugin marketplace add RealterHub/realter-skills
 claude plugin install realterid
 # En desarrollo:
-claude plugin install realterhub-operaciones
+claude plugin install realterhub-operations
 ```
 
 Instala solo el plugin del producto con el que vas a trabajar. Sus skills se activan según el pedido.
 
 En Codex, instala el plugin desde el marketplace compatible de OpenAI. Durante desarrollo también
-puedes cargar directamente `plugins/realterhub-operaciones`.
+puedes cargar directamente `plugins/realterhub-operations`.
 
 ### ChatGPT y Claude
 

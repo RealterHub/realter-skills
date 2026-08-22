@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { validatePacket } from "../../skills/cotizacion-proyecto-propiedad/scripts/lib/engine.mjs";
+import { validatePacket } from "../../skills/project-property-quotation/scripts/lib/engine.mjs";
 
 async function readStdin() {
   let raw = "";
@@ -17,7 +17,7 @@ function exit(payload) {
 try {
   const input = await readStdin();
   const file = input?.tool_input?.file_path;
-  if (typeof file !== "string" || !/(^|\/)(cotizacion|.+\.quotation)\.json$/i.test(file)) exit(null);
+  if (typeof file !== "string" || !/(^|\/)(quotation|.+\.quotation)\.json$/i.test(file)) exit(null);
   const packet = JSON.parse(await readFile(path.resolve(file), "utf8"));
   const validation = validatePacket(packet, { final: false });
   const incompleteCodes = new Set(["required", "terms_required", "unsupported_terms_shape"]);

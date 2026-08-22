@@ -23,7 +23,7 @@ function parseArgs(argv) {
 }
 
 async function loadPacket(file) {
-  if (!file) throw new Error("Falta --state <cotizacion.json>.");
+  if (!file) throw new Error("Falta --state <quotation.json>.");
   return JSON.parse(await readFile(path.resolve(file), "utf8"));
 }
 
@@ -53,7 +53,7 @@ function createPdf(browser, htmlPath, pdfPath) {
 async function main() {
   const { command, options } = parseArgs(process.argv.slice(2));
   if (!["init", "next", "ingest", "answer", "validate", "generate"].includes(command)) {
-    throw new Error("Uso: quotation.mjs <init|next|ingest|answer|validate|generate> --state cotizacion.json");
+    throw new Error("Uso: quotation.mjs <init|next|ingest|answer|validate|generate> --state quotation.json");
   }
   if (command === "init") {
     process.stdout.write(`${serialize(await initializeState(options.state, options.date))}\n`);
@@ -87,7 +87,7 @@ async function main() {
   const outputDir = path.resolve(options["output-dir"] || process.cwd());
   await mkdir(outputDir, { recursive: true });
   const subjectCode = packet.quotationType === "projectUnit" ? packet.projectUnit.code : packet.property.code;
-  const basename = slug(`cotizacion-${packet.contact.fullName}-${subjectCode}`) || "cotizacion";
+  const basename = slug(`quotation-${packet.contact.fullName}-${subjectCode}`) || "quotation";
   const htmlPath = path.join(outputDir, `${basename}.html`);
   const html = await renderQuotation(packet);
   await writeFile(htmlPath, html, "utf8");

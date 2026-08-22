@@ -182,7 +182,7 @@ async function atomicWrite(file, value) {
 }
 
 export async function loadState(file) {
-  if (!file) throw new Error("Falta --state <cotizacion.json>.");
+  if (!file) throw new Error("Falta --state <quotation.json>.");
   const target = path.resolve(file);
   const packet = JSON.parse(await readFile(target, "utf8"));
   let expected;
@@ -197,7 +197,7 @@ export async function loadState(file) {
 }
 
 export async function initializeState(file, date) {
-  if (!file) throw new Error("Falta --state <cotizacion.json>.");
+  if (!file) throw new Error("Falta --state <quotation.json>.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date ?? ""))) throw new Error("Falta --date YYYY-MM-DD o la fecha no es válida.");
   try {
     await access(path.resolve(file));

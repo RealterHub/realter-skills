@@ -5,10 +5,10 @@
   },
   "plugins": [
     {
-      "name": "realterhub-operaciones",
+      "name": "realterhub-operations",
       "source": {
         "source": "local",
-        "path": "./plugins/realterhub-operaciones"
+        "path": "./plugins/realterhub-operations"
       },
       "policy": {
         "installation": "AVAILABLE",

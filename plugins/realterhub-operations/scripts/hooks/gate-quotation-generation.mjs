@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { validatePacket } from "../../skills/cotizacion-proyecto-propiedad/scripts/lib/engine.mjs";
+import { validatePacket } from "../../skills/project-property-quotation/scripts/lib/engine.mjs";
 
 async function readStdin() {
   let raw = "";
