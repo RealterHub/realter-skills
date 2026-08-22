@@ -540,3 +540,34 @@ test("accepts a real base64 logo instead of always falling back to initials", as
   packet.organization.logoUrl = "javascript:alert(1)";
   assert.doesNotMatch(await renderQuotation(packet), /<img[^>]*class="organization-logo"/);
 });
+
+test("asks for the delivery date instead of blocking when the project has none", () => {
+  // 7 de 30 planes activos de producción viven en proyectos sin
+  // `estimated_handover_date`. El motor lo trataba como una ACCIÓN
+  // (`get_development_project`) que nunca podía resolverse porque el dato no
+  // existe en la base: el flujo quedaba pidiendo el detalle en loop. Uno de esos
+  // proyectos está en `underConstruction` — en obra y sin poder cotizarse.
+  const packet = projectPacket();
+  delete packet.project.estimatedHandoverDate;
+  packet.paymentConfiguration = {};
+
+  const step = nextStep(packet);
+  assert.equal(step.actions.length, 0, "no debe quedar ninguna acción irresoluble");
+  const question = step.questions.find((item) => item.code === "target_date");
+  assert.ok(question);
+  assert.equal(question.writes, "paymentConfiguration.targetDate");
+
+  // Con la fecha del asesor, cotiza normalmente.
+  packet.paymentConfiguration = { targetDate: "2026-11-20", reservationApplication: "creditAgainstSigning", constructionMethod: "monthlyUntilTarget" };
+  assert.equal(validatePacket(packet).valid, true);
+  const result = calculateQuotation(packet);
+  assert.equal(result.constructionCount, 8);
+  assert.equal(result.scheduledMinor + result.differenceMinor, result.priceMinor);
+});
+
+test("prefers the project's own handover date over the advisor's answer", () => {
+  const packet = projectPacket();
+  packet.paymentConfiguration.targetDate = "2030-01-01";
+  // El sistema manda cuando tiene el dato: la respuesta del asesor sólo cubre el hueco.
+  assert.equal(calculateQuotation(packet).targetDate, "2026-11-20");
+});
