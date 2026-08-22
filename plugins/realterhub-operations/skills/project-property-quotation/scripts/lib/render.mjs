@@ -12,13 +12,24 @@ const escapeHtml = (value) => String(value ?? "")
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#039;");
 
+/** Logos embebidos: hasta 512 KB de base64, suficiente para un logo real. */
+const MAX_DATA_URL_LENGTH = 512 * 1024;
+
 function safeImageUrl(value) {
   if (!value) return null;
+  const raw = String(value);
+  // El `data:` se decide por su propia forma. Antes vivía en el `catch` de
+  // `new URL()`, que para un `data:` válido NUNCA lanza — así que la rama era
+  // inalcanzable y todo logo en base64 caía a las iniciales.
+  if (/^data:/i.test(raw)) {
+    if (raw.length > MAX_DATA_URL_LENGTH) return null;
+    return /^data:image\/(?:png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/]+=*$/i.test(raw) ? raw : null;
+  }
   try {
-    const url = new URL(value);
+    const url = new URL(raw);
     return ["http:", "https:"].includes(url.protocol) ? url.href : null;
   } catch {
-    return /^data:image\/(?:png|jpeg|webp|svg\+xml);base64,/i.test(String(value)) ? String(value) : null;
+    return null;
   }
 }
 
@@ -48,8 +59,16 @@ function formatDate(value, locale, monthOnly = false) {
     .format(new Date(`${value}T00:00:00Z`));
 }
 
+/**
+ * Sustitución en UNA sola pasada. Con `replaceAll` encadenado, un valor que
+ * contuviera `{{OTRA_CLAVE}}` sobrevivía hasta el turno de esa clave y se
+ * sustituía: un contacto llamado `{{PROJECTION_ROWS}}` metía la tabla de pagos
+ * dentro de su propio nombre, y `{{BASE_PRICE}}` filtraba el precio al título.
+ * `escapeHtml` no escapa llaves, así que el ataque no necesita `<`, `>` ni `"`.
+ * Una sola pasada nunca vuelve a mirar lo ya sustituido.
+ */
 function replaceTokens(template, tokens) {
-  return Object.entries(tokens).reduce((result, [key, value]) => result.replaceAll(`{{${key}}}`, String(value)), template);
+  return template.replace(/\{\{([A-Z_]+)\}\}/g, (match, key) => (key in tokens ? String(tokens[key]) : match));
 }
 
 function subjectPresentation(packet) {
@@ -105,8 +124,8 @@ export async function renderQuotation(packet) {
   // así que el total proyectado puede quedar unos centavos por debajo del
   // precio. El documento lo dice: dos totales distintos sin explicación es lo
   // que hace que un cliente desconfíe de la cotización.
-  const roundingNote = calculation.residueMinor > 0n
-    ? `<p class="reconciliation">Las cuotas se muestran iguales y redondeadas al centavo; la diferencia con el precio cotizado es de ${escapeHtml(formatMoney(calculation.residueMinor, calculation.currency, calculation.fractionDigits, locale))}.</p>`
+  const roundingNote = calculation.differenceMinor > 0n
+    ? `<p class="reconciliation">Las cuotas se muestran iguales y redondeadas al centavo; la diferencia con el precio cotizado es de ${escapeHtml(formatMoney(calculation.differenceMinor, calculation.currency, calculation.fractionDigits, locale))}.</p>`
     : "";
   const offeringLabel = packet.quotationType === "readyProperty" && packet.propertyOffering.isNegotiable ? "Precio negociable" : "Precio cotizado";
 

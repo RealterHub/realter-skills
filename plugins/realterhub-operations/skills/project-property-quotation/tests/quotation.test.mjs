@@ -418,3 +418,125 @@ test("renders a secondary browser canvas, centered porcelain sheet and full porc
   assert.match(html, /\.projection-section \{ break-before: page; page-break-before: always;/);
   assert.doesNotMatch(html, /<th>#<\/th>|class="position"/);
 });
+
+// ─── Regresiones del QA adversarial ────────────────────────────────────────
+// Cada uno reproduce un hallazgo real. Varios se dispararon con datos de
+// producción, no con casos de laboratorio.
+
+test("credits the reservation against the next payment, not against a milestone named 'signing'", () => {
+  // Plan real de producción (PR-038 "Paseo La Arboleda", 20/80): reserva fija,
+  // tramo de obra y cierre, SIN hito de firma. Antes la reserva no se acreditaba
+  // nunca y el total daba siempre precio + reserva: era incotizable.
+  const packet = projectPacket();
+  packet.projectPaymentPlan.installments = [
+    { position: 1, milestoneType: "reservation", amountType: "fixed", amountValue: "200.00" },
+    { position: 2, milestoneType: "constructionPayment", amountType: "percentage", amountValue: "20.00" },
+    { position: 3, milestoneType: "closing", amountType: "percentage", amountValue: "80.00" },
+  ];
+  const result = calculateQuotation(packet);
+  // Concilia: antes daba precio + 200.00 y validate rechazaba siempre.
+  assert.equal(result.scheduledMinor + result.differenceMinor, result.priceMinor);
+  // El destino del crédito acá es el tramo de obra (no hay firma), así que la
+  // reserva se descuenta del total de ese tramo, repartido entre sus cuotas.
+  const construction = result.installments.filter((item) => item.kind === "construction");
+  const constructionTotal = construction.reduce((sum, item) => sum + item.amountMinor, 0n);
+  assert.equal(constructionTotal + result.differenceMinor, 2000000n - 20000n); // 20% − reserva
+  assert.equal(result.installments[0].amountMinor, 20000n); // la reserva sí se cobra
+});
+
+test("validate and calculate agree: no packet validates and then throws", () => {
+  // 33.33+33.33+33.34 suman 100 pero el redondeo half-up por línea deja 1
+  // centavo de deriva. Antes validate lo toleraba y calculate exigía cero.
+  const packet = projectPacket();
+  packet.projectUnit.basePrice = "100000.02";
+  packet.projectPaymentPlan.installments = [
+    { position: 1, milestoneType: "contractSigning", amountType: "percentage", amountValue: "33.33" },
+    { position: 2, milestoneType: "constructionPayment", amountType: "percentage", amountValue: "33.33" },
+    { position: 3, milestoneType: "closing", amountType: "percentage", amountValue: "33.34" },
+  ];
+  assert.equal(validatePacket(packet).valid, true);
+  assert.doesNotThrow(() => calculateQuotation(packet));
+});
+
+test("rejects a handover date earlier than the quotation", () => {
+  // Dato real: un proyecto en `delivery` con handover de hace dos años producía
+  // un documento con el pago más grande fechado antes que los anteriores.
+  const packet = projectPacket();
+  packet.project.estimatedHandoverDate = "2024-08-30";
+  packet.paymentConfiguration.constructionPaymentDate = "2024-08-01";
+  assert.ok(validatePacket(packet).errors.some((error) => error.code === "target_before_quotation"));
+});
+
+test("rejects calendar dates that do not exist", () => {
+  // Date.parse hace rollover silencioso: 2027 no es bisiesto.
+  const packet = projectPacket();
+  packet.project.estimatedHandoverDate = "2027-02-29";
+  assert.ok(validatePacket(packet).errors.some((error) => error.code === "invalid_date"));
+});
+
+test("bounds postDeliveryMonths instead of crashing on absurd values", () => {
+  const withPostDelivery = (months) => {
+    const packet = projectPacket();
+    packet.paymentConfiguration.postDeliveryMonths = months;
+    packet.projectPaymentPlan.installments = [
+      { position: 1, milestoneType: "contractSigning", amountType: "percentage", amountValue: "20.00" },
+      { position: 2, milestoneType: "constructionPayment", amountType: "percentage", amountValue: "30.00" },
+      { position: 3, milestoneType: "postDelivery", amountType: "percentage", amountValue: "50.00" },
+    ];
+    return packet;
+  };
+  // "0" daba `RangeError: Division by zero`; 20 dígitos, `Invalid time value`.
+  // Ambos crudos, sin `.validation`, desde dentro de calculateQuotation.
+  assert.equal(validatePacket(withPostDelivery("0")).valid, false);
+  assert.equal(validatePacket(withPostDelivery("99999999999999999999")).valid, false);
+  assert.equal(validatePacket(withPostDelivery("36")).valid, true);
+});
+
+test("orders the projection chronologically even when closing precedes postDelivery", () => {
+  // "El cierre va último" es una regla de POSICIÓN comercial; temporalmente el
+  // tramo post-entrega vence después. El cronograma salía desordenado.
+  const packet = projectPacket();
+  packet.paymentConfiguration.postDeliveryMonths = "3";
+  packet.projectPaymentPlan.installments = [
+    { position: 1, milestoneType: "reservation", amountType: "fixed", amountValue: "3000.00" },
+    { position: 2, milestoneType: "contractSigning", amountType: "percentage", amountValue: "20.00" },
+    { position: 3, milestoneType: "postDelivery", amountType: "percentage", amountValue: "30.00" },
+    { position: 4, milestoneType: "closing", amountType: "percentage", amountValue: "50.00" },
+  ];
+  const dates = calculateQuotation(packet).installments.map((item) => item.dueDate);
+  assert.deepEqual(dates, [...dates].sort());
+});
+
+test("refuses to emit installments worth nothing", () => {
+  const packet = projectPacket();
+  packet.projectUnit.basePrice = "1.00";
+  packet.project.estimatedHandoverDate = "2056-11-20";
+  packet.projectPaymentPlan.installments = [
+    { position: 1, milestoneType: "contractSigning", amountType: "percentage", amountValue: "20.00" },
+    { position: 2, milestoneType: "constructionPayment", amountType: "percentage", amountValue: "30.00" },
+    { position: 3, milestoneType: "closing", amountType: "percentage", amountValue: "50.00" },
+  ];
+  assert.throws(() => calculateQuotation(packet), (error) => error.validation?.errors[0].code === "zero_installment");
+});
+
+test("never substitutes a template token that arrived inside external data", async () => {
+  // `escapeHtml` no escapa llaves y `replaceTokens` sustituía en cascada: una
+  // organización llamada "{{BASE_PRICE}}" terminaba mostrando el precio, y
+  // "{{PROJECTION_ROWS}}" metía la tabla de pagos dentro del <h1>.
+  const packet = projectPacket();
+  packet.organization.name = "{{BASE_PRICE}}";
+  packet.contact.fullName = "{{PROJECTION_ROWS}}";
+  const html = await renderQuotation(packet);
+  assert.match(html, /<h1>\{\{BASE_PRICE\}\}<\/h1>/);
+  assert.doesNotMatch(html.match(/<h1>[\s\S]*?<\/h1>/)[0], /<tr>/);
+});
+
+test("accepts a real base64 logo instead of always falling back to initials", async () => {
+  // La rama del `data:` vivía en el `catch` de `new URL()`, que para un `data:`
+  // válido nunca lanza: era código inalcanzable.
+  const packet = projectPacket();
+  packet.organization.logoUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  assert.match(await renderQuotation(packet), /<img[^>]*class="organization-logo"/);
+  packet.organization.logoUrl = "javascript:alert(1)";
+  assert.doesNotMatch(await renderQuotation(packet), /<img[^>]*class="organization-logo"/);
+});

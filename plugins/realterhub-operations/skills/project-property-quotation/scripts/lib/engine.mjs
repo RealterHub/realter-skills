@@ -58,9 +58,22 @@ function uuid(errors, value, path) {
   if (value && !UUID.test(String(value))) errors.push({ code: "invalid_uuid", path, message: `${path} debe ser un UUID válido.` });
 }
 
+/**
+ * `Date.parse` acepta fechas que no existen: "2027-02-29" (año no bisiesto) y
+ * "2026-04-31" devuelven timestamp válido por rollover silencioso, y salían
+ * impresas tal cual en el documento. Se compara la fecha reconstruida contra
+ * la original para atrapar el rollover.
+ */
+export function isRealDate(value) {
+  const raw = String(value);
+  if (!ISO_DATE.test(raw)) return false;
+  const time = Date.parse(`${raw}T00:00:00Z`);
+  return !Number.isNaN(time) && new Date(time).toISOString().slice(0, 10) === raw;
+}
+
 function validDate(errors, value, path, label) {
-  if (value && (!ISO_DATE.test(String(value)) || Number.isNaN(Date.parse(`${value}T00:00:00Z`)))) {
-    errors.push({ code: "invalid_date", path, message: `${label} debe usar YYYY-MM-DD.` });
+  if (value && !isRealDate(value)) {
+    errors.push({ code: "invalid_date", path, message: `${label} debe ser una fecha real en formato YYYY-MM-DD.` });
   }
 }
 
@@ -185,12 +198,13 @@ export function nextStep(packet = {}) {
     for (const item of shapeErrors) blockers.push({ code: item.code, message: item.message });
   }
   const reservationLine = resolved.installments.find((item) => item.milestoneType === "reservation");
-  const signingLine = resolved.installments.find((item) => SIGNING_MILESTONES.has(item.milestoneType));
-  // Acreditar la reserva contra la firma solo tiene sentido si existen ambas.
-  if (reservationLine && signingLine && !["creditAgainstSigning", "standalone"].includes(packet.paymentConfiguration?.reservationApplication)) {
+  const creditTarget = creditTargetOf(resolved.installments);
+  // Acreditar la reserva sólo tiene sentido si hay un pago siguiente al que
+  // descontársela — no hace falta que ese pago se llame "firma".
+  if (reservationLine && creditTarget && !["creditAgainstSigning", "standalone"].includes(packet.paymentConfiguration?.reservationApplication)) {
     const amount = reservationLine.amountType === "percentage" ? `${reservationLine.amountValue}%` : `${reservationLine.amountValue} ${resolved.currency || ""}`.trim();
     question(questions, "configure_reservation_application", `¿Cómo debe aplicarse la reserva de ${amount}?`, "paymentConfiguration.reservationApplication", [
-      { label: "Descontar de la firma", value: "creditAgainstSigning" },
+      { label: `Descontar de "${milestoneLabels[creditTarget.milestoneType]}"`, value: "creditAgainstSigning" },
       { label: "Mantener como pago separado", value: "standalone" },
     ]);
   }
@@ -269,7 +283,22 @@ function validateInstallments(errors, installments) {
  */
 const SERIES_MILESTONES = new Set(["constructionPayment", "postDelivery"]);
 
+/** Techo de una serie mensual: 50 años. Más que eso no es un plan de pago. */
+const MAX_SERIES_MONTHS = 600;
+
 const SIGNING_MILESTONES = new Set(["promissoryAgreement", "contractSigning"]);
+
+/**
+ * La reserva es un adelanto del PAGO SIGUIENTE, sea cual sea. Antes se buscaba
+ * un hito llamado "firma" y, si el plan no tenía uno, la reserva no se
+ * acreditaba nunca y el total quedaba siempre por encima del precio: el plan
+ * real "20/80" de producción (reserva fija → obra → cierre) era incotizable.
+ */
+function creditTargetOf(installments) {
+  return [...installments]
+    .filter((item) => item.milestoneType !== "reservation")
+    .sort((a, b) => a.position - b.position)[0] ?? null;
+}
 
 /** Monto de una línea según SU propio tipo — nunca según su hito. */
 function lineAmountMinor(line, priceMinor, fractionDigits) {
@@ -364,9 +393,9 @@ export function validatePacket(packet = {}, { final = true } = {}) {
   // antes se pedían siempre y el flujo nunca las preguntaba, así que un plan
   // sin reserva o sin tramo de obra quedaba en un rechazo sin salida.
   const hasReservation = resolved.installments.some((item) => item.milestoneType === "reservation");
-  const hasSigning = resolved.installments.some((item) => SIGNING_MILESTONES.has(item.milestoneType));
+  const hasCreditTarget = creditTargetOf(resolved.installments) !== null;
   const hasSeries = resolved.installments.some((item) => SERIES_MILESTONES.has(item.milestoneType));
-  if (final && hasReservation && hasSigning && !["creditAgainstSigning", "standalone"].includes(packet.paymentConfiguration?.reservationApplication)) {
+  if (final && hasReservation && hasCreditTarget && !["creditAgainstSigning", "standalone"].includes(packet.paymentConfiguration?.reservationApplication)) {
     errors.push({ code: "reservation_application_required", path: "paymentConfiguration.reservationApplication", message: "Debe confirmarse cómo se aplica la reserva." });
   }
   if (final && hasSeries && packet.paymentConfiguration?.constructionMethod !== "monthlyUntilTarget") {
@@ -375,8 +404,20 @@ export function validatePacket(packet = {}, { final = true } = {}) {
   // Cuántos meses dura el tramo post-entrega no está en RealterHub ni se puede
   // derivar del plan. Sin respuesta explícita no se proyecta: un default
   // silencioso convertiría el tramo en un pago único que nadie pactó.
-  if (final && resolved.installments.some((item) => item.milestoneType === "postDelivery") && !/^\d+$/.test(String(packet.paymentConfiguration?.postDeliveryMonths ?? ""))) {
-    errors.push({ code: "post_delivery_months_required", path: "paymentConfiguration.postDeliveryMonths", message: "Debe indicarse en cuántos meses se paga el tramo posterior a la entrega." });
+  if (final && resolved.installments.some((item) => item.milestoneType === "postDelivery")) {
+    const months = String(packet.paymentConfiguration?.postDeliveryMonths ?? "");
+    // Acotado: sin techo, un número de 20 dígitos desbordaba `Date` y tiraba un
+    // RangeError crudo, sin `.validation`, desde dentro de calculateQuotation.
+    if (!/^\d{1,3}$/.test(months) || Number(months) < 1 || Number(months) > MAX_SERIES_MONTHS) {
+      errors.push({ code: "post_delivery_months_required", path: "paymentConfiguration.postDeliveryMonths", message: `Debe indicarse en cuántos meses se paga el tramo posterior a la entrega (entre 1 y ${MAX_SERIES_MONTHS}).` });
+    }
+  }
+  // Una entrega anterior a la cotización producía un documento con el pago más
+  // grande fechado ANTES que los anteriores. Pasó con datos reales: un proyecto
+  // en `delivery` con handover de hace dos años.
+  if (final && packet.document?.date && resolved.targetDate && isRealDate(packet.document.date) && isRealDate(resolved.targetDate)
+      && monthIndex(resolved.targetDate) < monthIndex(packet.document.date)) {
+    errors.push({ code: "target_before_quotation", path: "targetDate", message: `La fecha de cierre o entrega (${resolved.targetDate}) es anterior al mes de la cotización (${packet.document.date}).` });
   }
   // Ídem cuando el tramo de obra no tiene ventana mensual: la fecha es un dato
   // del negocio, no algo que el motor pueda derivar del plan.
@@ -393,17 +434,20 @@ export function validatePacket(packet = {}, { final = true } = {}) {
     // Cada línea vale lo que dice SU amountType. Nada se deriva del hito.
     const linesTotal = resolved.installments.reduce((sum, line) => sum + lineAmountMinor(line, priceMinor, 2), 0n);
     const reservation = resolved.installments.find((item) => item.milestoneType === "reservation");
-    const signing = resolved.installments.find((item) => SIGNING_MILESTONES.has(item.milestoneType));
-    const credits = hasReservation && hasSigning && packet.paymentConfiguration?.reservationApplication === "creditAgainstSigning";
+    const target = creditTargetOf(resolved.installments);
+    const credits = hasReservation && hasCreditTarget && packet.paymentConfiguration?.reservationApplication === "creditAgainstSigning";
     const reservationMinor = reservation ? lineAmountMinor(reservation, priceMinor, 2) : 0n;
     // Acreditar la reserva contra la firma no agrega dinero: lo descuenta una vez.
     const effectiveTotal = linesTotal - (credits ? reservationMinor : 0n);
     const difference = effectiveTotal - priceMinor;
-    if ((difference < 0n ? -difference : difference) > 2n) {
+    // Cada línea puede desviarse a lo sumo media unidad menor por el redondeo
+    // half-up; con N líneas la deriva acumulada no puede pasar de N.
+    const tolerance = BigInt(resolved.installments.length);
+    if ((difference < 0n ? -difference : difference) > tolerance) {
       errors.push({ code: "unreconciled_configuration", path: "paymentConfiguration", message: `La configuración no concilia con el precio cotizado. Diferencia antes de proyectar cuotas: ${difference} unidades menores.` });
     }
-    if (credits && reservationMinor > lineAmountMinor(signing, priceMinor, 2)) {
-      errors.push({ code: "reservation_exceeds_signing", path: "paymentConfiguration.reservationApplication", message: "La reserva no puede exceder el importe bruto de la firma." });
+    if (credits && reservationMinor > lineAmountMinor(target, priceMinor, 2)) {
+      errors.push({ code: "reservation_exceeds_signing", path: "paymentConfiguration.reservationApplication", message: `La reserva no puede exceder el importe bruto de "${milestoneLabels[target.milestoneType]}".` });
     }
   }
   return { valid: errors.length === 0, errors, warnings };
@@ -424,14 +468,14 @@ export function calculateQuotation(packet) {
   const source = [...resolved.installments].sort((a, b) => a.position - b.position);
 
   const reservation = source.find((item) => item.milestoneType === "reservation");
-  const signing = source.find((item) => SIGNING_MILESTONES.has(item.milestoneType));
-  const credits = Boolean(reservation && signing && packet.paymentConfiguration?.reservationApplication === "creditAgainstSigning");
+  const creditTarget = creditTargetOf(source);
+  const credits = Boolean(reservation && creditTarget && packet.paymentConfiguration?.reservationApplication === "creditAgainstSigning");
   const reservationMinor = reservation ? lineAmountMinor(reservation, priceMinor, fractionDigits) : 0n;
 
   /** Lo que se paga EN ESE MOMENTO: la firma cobra menos si ya hubo reserva. */
   const netOf = (line) => {
     const gross = lineAmountMinor(line, priceMinor, fractionDigits);
-    return credits && line === signing ? gross - reservationMinor : gross;
+    return credits && line === creditTarget ? gross - reservationMinor : gross;
   };
 
   /** Una propiedad terminada no tiene obra: el mismo tramo cambia de nombre. */
@@ -468,7 +512,7 @@ export function calculateQuotation(packet) {
     if (!SERIES_MILESTONES.has(line.milestoneType)) {
       installments.push({
         position: installments.length + 1,
-        label: credits && line === signing ? "Firma menos reserva" : labelFor(line.milestoneType),
+        label: credits && line === creditTarget ? `${labelFor(line.milestoneType)} menos reserva` : labelFor(line.milestoneType),
         dueDate: milestoneDate(line.milestoneType),
         amountMinor: amount,
         kind: line.milestoneType,
@@ -496,17 +540,36 @@ export function calculateQuotation(packet) {
     }
   }
 
-  const scheduledMinor = installments.reduce((sum, item) => sum + item.amountMinor, 0n);
-  const residueMinor = residues.reduce((sum, item) => sum + item.residueMinor, 0n);
-  // Invariante: lo proyectado más el residuo truncado reconstruye el precio
-  // exacto. El residuo no es una diferencia inexplicada — `splitEqually` lo
-  // acota a `0 <= residuo < cantidad de cuotas` y se reporta aquí.
-  const varianceMinor = scheduledMinor + residueMinor - priceMinor;
-  if (varianceMinor !== 0n) {
-    const error = new Error("La configuración de pagos no concilia con el precio de la propiedad.");
-    error.validation = { valid: false, errors: [{ code: "unreconciled_total", path: "paymentConfiguration", message: `${error.message} Diferencia en unidades menores: ${varianceMinor}.` }], warnings: validation.warnings };
+  // Un tramo repartido en tantos meses que cada cuota da 0 no es un plan de
+  // pago: son cientos de líneas de $0.00 en un documento que ve un cliente.
+  const empty = installments.find((item) => item.amountMinor <= 0n);
+  if (empty) {
+    const error = new Error("La proyección genera cuotas sin importe.");
+    error.validation = { valid: false, errors: [{ code: "zero_installment", path: "paymentTerms", message: `${error.message} "${empty.label}" quedaría en 0 al repartir el tramo.` }], warnings: validation.warnings };
     throw error;
   }
+
+  // Orden cronológico. La posición del plan es comercial, no temporal: con
+  // `postDelivery` la regla "el cierre va último" ubica el cierre después, pero
+  // temporalmente vence ANTES que las cuotas posteriores a la entrega.
+  installments.sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : a.position - b.position));
+  installments.forEach((item, index) => { item.position = index + 1; });
+
+  const scheduledMinor = installments.reduce((sum, item) => sum + item.amountMinor, 0n);
+  const residueMinor = residues.reduce((sum, item) => sum + item.residueMinor, 0n);
+  // Todo lo que no queda asignado es UNA cifra: el residuo de las series más la
+  // deriva del redondeo por línea. Antes `validate` toleraba esa deriva y
+  // `calculate` exigía cero exacto, así que un plan podía validar y después
+  // explotar. Ahora es la misma cuenta en los dos lados y el documento la declara.
+  const linesTotalMinor = source.reduce((sum, line) => sum + lineAmountMinor(line, priceMinor, fractionDigits), 0n);
+  const lineDriftMinor = priceMinor - (linesTotalMinor - (credits ? reservationMinor : 0n));
+  const differenceMinor = priceMinor - scheduledMinor;
+  if (differenceMinor !== lineDriftMinor + residueMinor) {
+    const error = new Error("La configuración de pagos no concilia con el precio de la propiedad.");
+    error.validation = { valid: false, errors: [{ code: "unreconciled_total", path: "paymentConfiguration", message: `${error.message} Diferencia sin explicar: ${differenceMinor - lineDriftMinor - residueMinor}.` }], warnings: validation.warnings };
+    throw error;
+  }
+  const varianceMinor = 0n;
   const construction = installments.filter((item) => item.kind === "construction");
   return {
     ...resolved,
@@ -514,6 +577,8 @@ export function calculateQuotation(packet) {
     priceMinor,
     scheduledMinor,
     residueMinor,
+    lineDriftMinor,
+    differenceMinor,
     residues,
     varianceMinor,
     summary,
