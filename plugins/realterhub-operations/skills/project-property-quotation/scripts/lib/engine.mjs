@@ -89,12 +89,18 @@ function propertyTerms(packet) {
   const terms = packet.paymentConfiguration ?? {};
   const values = [terms.reservationAmount, terms.signingPercentage, terms.constructionPercentage, terms.closingPercentage];
   if (!values.every((value) => value !== undefined && value !== null && value !== "")) return [];
-  return [
-    { position: 1, milestoneType: "reservation", amountType: "fixed", amountValue: String(terms.reservationAmount) },
-    { position: 2, milestoneType: "contractSigning", amountType: "percentage", amountValue: String(terms.signingPercentage) },
-    { position: 3, milestoneType: "constructionPayment", amountType: "percentage", amountValue: String(terms.constructionPercentage) },
-    { position: 4, milestoneType: "closing", amountType: "percentage", amountValue: String(terms.closingPercentage) },
+  const lines = [
+    { milestoneType: "reservation", amountType: "fixed", amountValue: String(terms.reservationAmount) },
+    { milestoneType: "contractSigning", amountType: "percentage", amountValue: String(terms.signingPercentage) },
   ];
+  // Una propiedad terminada no tiene obra que financiar: lo normal es reserva →
+  // inicial → cierre. Un 0 acá significa "sin cuotas", y entonces la línea no
+  // existe, en vez de inventarle un tramo de construcción a una casa hecha.
+  if ((decimalParts(String(terms.constructionPercentage))?.numerator ?? 0n) > 0n) {
+    lines.push({ milestoneType: "constructionPayment", amountType: "percentage", amountValue: String(terms.constructionPercentage) });
+  }
+  lines.push({ milestoneType: "closing", amountType: "percentage", amountValue: String(terms.closingPercentage) });
+  return lines.map((line, index) => ({ ...line, position: index + 1 }));
 }
 
 export function resolveQuotation(packet) {
@@ -157,7 +163,7 @@ export function nextStep(packet = {}) {
       const scalarQuestions = [
         ["reservation_amount", "¿Cuál es el monto fijo de la reserva?", "reservationAmount", "money"],
         ["signing_percentage", "¿Qué porcentaje del precio corresponde a la firma?", "signingPercentage", "percentage"],
-        ["construction_percentage", "¿Qué porcentaje se distribuirá en cuotas antes del cierre?", "constructionPercentage", "percentage"],
+        ["construction_percentage", "¿Qué porcentaje se distribuirá en cuotas mensuales antes del cierre? Responde 0 si se paga sin cuotas.", "constructionPercentage", "percentage"],
         ["closing_percentage", "¿Qué porcentaje corresponde al pago de cierre o entrega?", "closingPercentage", "percentage"],
         ["target_date", "¿Cuál es la fecha prevista de cierre o entrega?", "targetDate", "date"],
       ];
@@ -170,14 +176,28 @@ export function nextStep(packet = {}) {
   }
 
   const resolved = resolveQuotation(packet);
-  const fixedReservation = resolved.installments.find((item) => item.milestoneType === "reservation" && item.amountType === "fixed");
-  if (fixedReservation && !["creditAgainstSigning", "standalone"].includes(packet.paymentConfiguration?.reservationApplication)) {
-    question(questions, "configure_reservation_application", `¿Cómo debe aplicarse la reserva fija de ${fixedReservation.amountValue} ${resolved.currency || ""}?`, "paymentConfiguration.reservationApplication", [
+  // La forma del plan se juzga ACÁ, no recién en `validate`: antes el flujo
+  // respondía "listo" y el validador rechazaba, sin ninguna transición que
+  // reparara el estado. Un plan inválido ahora es un bloqueo explícito.
+  if (resolved.installments.length > 0) {
+    const shapeErrors = [];
+    validateInstallments(shapeErrors, resolved.installments);
+    for (const item of shapeErrors) blockers.push({ code: item.code, message: item.message });
+  }
+  const reservationLine = resolved.installments.find((item) => item.milestoneType === "reservation");
+  const signingLine = resolved.installments.find((item) => SIGNING_MILESTONES.has(item.milestoneType));
+  // Acreditar la reserva contra la firma solo tiene sentido si existen ambas.
+  if (reservationLine && signingLine && !["creditAgainstSigning", "standalone"].includes(packet.paymentConfiguration?.reservationApplication)) {
+    const amount = reservationLine.amountType === "percentage" ? `${reservationLine.amountValue}%` : `${reservationLine.amountValue} ${resolved.currency || ""}`.trim();
+    question(questions, "configure_reservation_application", `¿Cómo debe aplicarse la reserva de ${amount}?`, "paymentConfiguration.reservationApplication", [
       { label: "Descontar de la firma", value: "creditAgainstSigning" },
       { label: "Mantener como pago separado", value: "standalone" },
     ]);
   }
-  if (resolved.installments.some((item) => item.milestoneType === "constructionPayment") && !packet.paymentConfiguration?.constructionMethod) {
+  if (resolved.installments.some((item) => item.milestoneType === "postDelivery") && !packet.paymentConfiguration?.postDeliveryMonths) {
+    question(questions, "post_delivery_months", "¿En cuántos meses se paga el tramo posterior a la entrega?", "paymentConfiguration.postDeliveryMonths", null, { valueType: "integer" });
+  }
+  if (resolved.installments.some((item) => SERIES_MILESTONES.has(item.milestoneType)) && !packet.paymentConfiguration?.constructionMethod) {
     question(questions, "confirm_monthly_projection", "¿Confirmas cuotas mensuales iguales, comenzando dos meses después de la fecha de cotización y terminando el mes anterior al cierre o entrega?", "paymentConfiguration.constructionMethod", [
       { label: "Sí, aplicar esta metodología", value: "monthlyUntilTarget" },
       { label: "No, usa otra metodología", value: "unsupported" },
@@ -230,13 +250,48 @@ function validateInstallments(errors, installments) {
   const hundred = 100n * power10(percentageScale);
   if (fixedCount === 0 && percentageNumerator !== hundred) errors.push({ code: "percentage_total", path: "paymentTerms", message: "Los porcentajes deben sumar exactamente 100%." });
   if (fixedCount > 0 && percentageNumerator > hundred) errors.push({ code: "mixed_percentage_total", path: "paymentTerms", message: "Los porcentajes de un plan mixto no pueden superar 100%." });
-  const reservations = installments.filter((item) => item.milestoneType === "reservation" && item.amountType === "fixed");
-  const signings = installments.filter((item) => ["promissoryAgreement", "contractSigning"].includes(item.milestoneType) && item.amountType === "percentage");
-  const construction = installments.filter((item) => item.milestoneType === "constructionPayment" && item.amountType === "percentage");
-  const closing = installments.filter((item) => item.milestoneType === "closing" && item.amountType === "percentage");
-  if (reservations.length !== 1 || signings.length !== 1 || construction.length !== 1 || closing.length !== 1 || installments.length !== 4) {
-    errors.push({ code: "unsupported_terms_shape", path: "paymentTerms", message: "Esta versión requiere una reserva fija, una firma porcentual, un tramo porcentual de cuotas y un cierre porcentual." });
-  }
+  // No hay supuesto de forma: el plan que llega de RealterHub manda. Las
+  // únicas reglas son las de arriba, que protegen la aritmética (posiciones,
+  // un solo cierre y al final, porcentajes que no superen 100).
+}
+
+/**
+ * Hitos que se reparten en cuotas mensuales; el resto es un pago único.
+ * `constructionPayment` se reparte entre la cotización y la entrega;
+ * `postDelivery` arranca después de la entrega (financiamiento del vendedor).
+ */
+const SERIES_MILESTONES = new Set(["constructionPayment", "postDelivery"]);
+
+const SIGNING_MILESTONES = new Set(["promissoryAgreement", "contractSigning"]);
+
+/** Monto de una línea según SU propio tipo — nunca según su hito. */
+function lineAmountMinor(line, priceMinor, fractionDigits) {
+  return line.amountType === "percentage"
+    ? percentageOfMinor(priceMinor, line.amountValue)
+    : decimalToMinor(line.amountValue, fractionDigits);
+}
+
+/**
+ * Cuántas cuotas mensuales entran entre la cotización y la entrega. La primera
+ * cae dos meses después de la cotización (30 días reserva→firma, 30 más
+ * firma→primera cuota) y la última el mes anterior a la entrega. Si no entra
+ * ninguna, el tramo se paga de una sola vez: nunca es un error.
+ */
+function constructionCountFor(quoteDate, targetDate) {
+  if (!targetDate) return 1;
+  return Math.max(1, monthIndex(targetDate) - monthIndex(quoteDate) - 2);
+}
+
+/**
+ * Reparto elegido por el dueño (contrastado con contratos reales de RD): todas
+ * las cuotas iguales, truncadas al centavo, y el residuo queda sin asignar en
+ * vez de inflar algunas cuotas. El residuo está acotado por construcción:
+ * `0 <= residuo < cantidad`, y se reporta para que sea visible, no silencioso.
+ */
+function splitEqually(totalMinor, count) {
+  const divisor = BigInt(count);
+  const each = totalMinor / divisor;
+  return { each, residue: totalMinor - each * divisor };
 }
 
 export function validatePacket(packet = {}, { final = true } = {}) {
@@ -285,7 +340,10 @@ export function validatePacket(packet = {}, { final = true } = {}) {
     uuid(errors, packet.propertyOffering?.id, "propertyOffering.id");
     if (packet.propertyOffering?.offeringType && packet.propertyOffering.offeringType !== "sale") errors.push({ code: "not_sale_offering", path: "propertyOffering.offeringType", message: "La reventa debe usar una oferta de tipo sale." });
     if (packet.propertyOffering?.status && packet.propertyOffering.status !== "active") errors.push({ code: "inactive_offering", path: "propertyOffering.status", message: "La oferta de venta debe estar activa." });
-    for (const [key, label] of [["reservationAmount", "La reserva"], ["signingPercentage", "El porcentaje de firma"], ["constructionPercentage", "El porcentaje de cuotas"], ["closingPercentage", "El porcentaje de cierre"]]) positiveDecimal(errors, packet.paymentConfiguration?.[key], `paymentConfiguration.${key}`, label);
+    for (const [key, label] of [["reservationAmount", "La reserva"], ["signingPercentage", "El porcentaje de firma"], ["closingPercentage", "El porcentaje de cierre"]]) positiveDecimal(errors, packet.paymentConfiguration?.[key], `paymentConfiguration.${key}`, label);
+    // El tramo de cuotas admite 0: una propiedad lista se paga sin mensualidades.
+    const constructionParts = decimalParts(String(packet.paymentConfiguration?.constructionPercentage ?? ""));
+    if (!constructionParts) errors.push({ code: "invalid_decimal", path: "paymentConfiguration.constructionPercentage", message: "El porcentaje de cuotas debe ser un decimal (0 si no hay cuotas)." });
     required(errors, packet.paymentConfiguration?.targetDate, "paymentConfiguration.targetDate", "La fecha de cierre o entrega");
     validDate(errors, packet.paymentConfiguration?.targetDate, "paymentConfiguration.targetDate", "La fecha de cierre o entrega");
   }
@@ -293,31 +351,36 @@ export function validatePacket(packet = {}, { final = true } = {}) {
   const resolved = resolveQuotation(packet);
   if (resolved.currency && !/^[A-Z]{3}$/.test(resolved.currency)) errors.push({ code: "invalid_currency", path: "currency", message: "La moneda debe ser un código ISO 4217 de tres letras." });
   validateInstallments(errors, resolved.installments);
-  if (final && !["creditAgainstSigning", "standalone"].includes(packet.paymentConfiguration?.reservationApplication)) errors.push({ code: "reservation_application_required", path: "paymentConfiguration.reservationApplication", message: "Debe confirmarse cómo se aplica la reserva." });
-  if (final && packet.paymentConfiguration?.constructionMethod !== "monthlyUntilTarget") errors.push({ code: "construction_method_required", path: "paymentConfiguration.constructionMethod", message: "Debe confirmarse la metodología mensual de proyección." });
+  // Estas dos solo se exigen cuando el plan tiene la línea que les da sentido:
+  // antes se pedían siempre y el flujo nunca las preguntaba, así que un plan
+  // sin reserva o sin tramo de obra quedaba en un rechazo sin salida.
+  const hasReservation = resolved.installments.some((item) => item.milestoneType === "reservation");
+  const hasSigning = resolved.installments.some((item) => SIGNING_MILESTONES.has(item.milestoneType));
+  const hasSeries = resolved.installments.some((item) => SERIES_MILESTONES.has(item.milestoneType));
+  if (final && hasReservation && hasSigning && !["creditAgainstSigning", "standalone"].includes(packet.paymentConfiguration?.reservationApplication)) {
+    errors.push({ code: "reservation_application_required", path: "paymentConfiguration.reservationApplication", message: "Debe confirmarse cómo se aplica la reserva." });
+  }
+  if (final && hasSeries && packet.paymentConfiguration?.constructionMethod !== "monthlyUntilTarget") {
+    errors.push({ code: "construction_method_required", path: "paymentConfiguration.constructionMethod", message: "Debe confirmarse la metodología mensual de proyección." });
+  }
   if (final && (!packet.organization?.name || !packet.collaborator?.fullName)) errors.push({ code: "unverified_identity", path: "organization", message: "No se puede generar sin la identidad de la organización y del colaborador de la conexión." });
 
   if (final && errors.length === 0) {
     const priceMinor = decimalToMinor(resolved.price);
+    // Cada línea vale lo que dice SU amountType. Nada se deriva del hito.
+    const linesTotal = resolved.installments.reduce((sum, line) => sum + lineAmountMinor(line, priceMinor, 2), 0n);
     const reservation = resolved.installments.find((item) => item.milestoneType === "reservation");
-    const signing = resolved.installments.find((item) => ["promissoryAgreement", "contractSigning"].includes(item.milestoneType));
-    const construction = resolved.installments.find((item) => item.milestoneType === "constructionPayment");
-    const closing = resolved.installments.find((item) => item.milestoneType === "closing");
-    const reservationMinor = decimalToMinor(reservation.amountValue);
-    const signingMinor = percentageOfMinor(priceMinor, signing.amountValue);
-    const baseTotal = reservationMinor
-      + (packet.paymentConfiguration.reservationApplication === "creditAgainstSigning" ? signingMinor - reservationMinor : signingMinor)
-      + percentageOfMinor(priceMinor, construction.amountValue)
-      + percentageOfMinor(priceMinor, closing.amountValue);
-    const baseDifference = baseTotal - priceMinor;
-    if ((baseDifference < 0n ? -baseDifference : baseDifference) > 2n) {
-      errors.push({ code: "unreconciled_configuration", path: "paymentConfiguration", message: `La configuración no concilia con el precio cotizado. Diferencia antes de proyectar cuotas: ${baseDifference} unidades menores.` });
+    const signing = resolved.installments.find((item) => SIGNING_MILESTONES.has(item.milestoneType));
+    const credits = hasReservation && hasSigning && packet.paymentConfiguration?.reservationApplication === "creditAgainstSigning";
+    const reservationMinor = reservation ? lineAmountMinor(reservation, priceMinor, 2) : 0n;
+    // Acreditar la reserva contra la firma no agrega dinero: lo descuenta una vez.
+    const effectiveTotal = linesTotal - (credits ? reservationMinor : 0n);
+    const difference = effectiveTotal - priceMinor;
+    if ((difference < 0n ? -difference : difference) > 2n) {
+      errors.push({ code: "unreconciled_configuration", path: "paymentConfiguration", message: `La configuración no concilia con el precio cotizado. Diferencia antes de proyectar cuotas: ${difference} unidades menores.` });
     }
-    if (packet.paymentConfiguration.reservationApplication === "creditAgainstSigning" && reservationMinor > signingMinor) {
+    if (credits && reservationMinor > lineAmountMinor(signing, priceMinor, 2)) {
       errors.push({ code: "reservation_exceeds_signing", path: "paymentConfiguration.reservationApplication", message: "La reserva no puede exceder el importe bruto de la firma." });
-    }
-    if (monthIndex(resolved.targetDate) - monthIndex(packet.document.date) - 2 < 1) {
-      errors.push({ code: "target_too_soon", path: "targetDate", message: "El cierre o entrega debe ocurrir al menos tres meses después del mes de la cotización." });
     }
   }
   return { valid: errors.length === 0, errors, warnings };
@@ -333,63 +396,107 @@ export function calculateQuotation(packet) {
   const resolved = resolveQuotation(packet);
   const fractionDigits = 2;
   const priceMinor = decimalToMinor(resolved.price, fractionDigits);
-  const source = [...resolved.installments].sort((a, b) => a.position - b.position);
-  const reservation = source.find((item) => item.milestoneType === "reservation");
-  const signing = source.find((item) => ["promissoryAgreement", "contractSigning"].includes(item.milestoneType));
-  const construction = source.find((item) => item.milestoneType === "constructionPayment");
-  const closing = source.find((item) => item.milestoneType === "closing");
-  const reservationMinor = decimalToMinor(reservation.amountValue, fractionDigits);
-  const signingGrossMinor = percentageOfMinor(priceMinor, signing.amountValue);
-  const closingMinor = percentageOfMinor(priceMinor, closing.amountValue);
-  const creditsReservation = packet.paymentConfiguration.reservationApplication === "creditAgainstSigning";
-  if (creditsReservation && reservationMinor > signingGrossMinor) {
-    const error = new Error("La reserva no puede exceder el importe bruto de la firma.");
-    error.validation = { valid: false, errors: [{ code: "reservation_exceeds_signing", path: "paymentConfiguration.reservationApplication", message: error.message }], warnings: validation.warnings };
-    throw error;
-  }
   const quoteDate = packet.document.date;
   const targetDate = resolved.targetDate;
-  const constructionCount = monthIndex(targetDate) - monthIndex(quoteDate) - 2;
-  if (constructionCount < 1) {
-    const error = new Error("El cierre o entrega debe ocurrir al menos tres meses después del mes de la cotización.");
-    error.validation = { valid: false, errors: [{ code: "target_too_soon", path: "targetDate", message: error.message }], warnings: validation.warnings };
-    throw error;
-  }
-  const signingNetMinor = creditsReservation ? signingGrossMinor - reservationMinor : signingGrossMinor;
-  const reconciledConstructionTotalMinor = priceMinor - reservationMinor - signingNetMinor - closingMinor;
-  const constructionDivisor = BigInt(constructionCount);
-  const constructionPaymentMinor = reconciledConstructionTotalMinor / constructionDivisor;
-  const constructionRemainderMinor = reconciledConstructionTotalMinor % constructionDivisor;
-  const summary = source.map((installment) => ({
-    ...installment,
-    label: resolved.kind === "readyProperty" && installment.milestoneType === "constructionPayment"
-      ? "Cuotas antes del cierre"
-      : resolved.kind === "readyProperty" && installment.milestoneType === "closing"
-        ? "Pago al cierre"
-        : milestoneLabels[installment.milestoneType],
-    amountMinor: installment.amountType === "percentage" ? percentageOfMinor(priceMinor, installment.amountValue) : decimalToMinor(installment.amountValue, fractionDigits),
-    dueDate: installment.milestoneType === "reservation" ? quoteDate : ["promissoryAgreement", "contractSigning"].includes(installment.milestoneType) ? addMonths(quoteDate, 1) : installment.milestoneType === "closing" ? targetDate : null,
+  const source = [...resolved.installments].sort((a, b) => a.position - b.position);
+
+  const reservation = source.find((item) => item.milestoneType === "reservation");
+  const signing = source.find((item) => SIGNING_MILESTONES.has(item.milestoneType));
+  const credits = Boolean(reservation && signing && packet.paymentConfiguration?.reservationApplication === "creditAgainstSigning");
+  const reservationMinor = reservation ? lineAmountMinor(reservation, priceMinor, fractionDigits) : 0n;
+
+  /** Lo que se paga EN ESE MOMENTO: la firma cobra menos si ya hubo reserva. */
+  const netOf = (line) => {
+    const gross = lineAmountMinor(line, priceMinor, fractionDigits);
+    return credits && line === signing ? gross - reservationMinor : gross;
+  };
+
+  /** Una propiedad terminada no tiene obra: el mismo tramo cambia de nombre. */
+  const labelFor = (milestone) => {
+    if (resolved.kind !== "readyProperty") return milestoneLabels[milestone];
+    if (milestone === "constructionPayment") return "Cuotas antes del cierre";
+    if (milestone === "closing") return "Pago al cierre";
+    return milestoneLabels[milestone];
+  };
+
+  const milestoneDate = (milestone) => {
+    if (milestone === "reservation") return quoteDate;
+    if (SIGNING_MILESTONES.has(milestone)) return addMonths(quoteDate, 1);
+    return targetDate;
+  };
+
+  // La tabla de condiciones muestra el importe BRUTO de cada línea (el % que
+  // pactó el desarrollador); el desglose de abajo muestra lo que se paga.
+  const summary = source.map((line) => ({
+    ...line,
+    label: labelFor(line.milestoneType),
+    amountMinor: lineAmountMinor(line, priceMinor, fractionDigits),
+    dueDate: SERIES_MILESTONES.has(line.milestoneType) ? null : milestoneDate(line.milestoneType),
   }));
-  const installments = [
-    { position: 1, label: "Reserva", dueDate: quoteDate, amountMinor: reservationMinor, kind: "reservation" },
-    { position: 2, label: creditsReservation ? "Firma menos reserva" : "Firma", dueDate: addMonths(quoteDate, 1), amountMinor: signingNetMinor, kind: "signing" },
-    ...Array.from({ length: constructionCount }, (_, index) => ({
-      position: index + 3,
-      label: `Cuota ${index + 1}`,
-      dueDate: addMonths(quoteDate, index + 2),
-      amountMinor: constructionPaymentMinor + (BigInt(index) < constructionRemainderMinor ? 1n : 0n),
-      kind: "construction",
-    })),
-    { position: constructionCount + 3, label: "Pago de cierre o entrega", dueDate: targetDate, amountMinor: closingMinor, kind: "closing" },
-  ];
+
+  const installments = [];
+  const residues = [];
+  for (const line of source) {
+    const amount = netOf(line);
+    if (!SERIES_MILESTONES.has(line.milestoneType)) {
+      installments.push({
+        position: installments.length + 1,
+        label: credits && line === signing ? "Firma menos reserva" : labelFor(line.milestoneType),
+        dueDate: milestoneDate(line.milestoneType),
+        amountMinor: amount,
+        kind: line.milestoneType,
+      });
+      continue;
+    }
+    const isConstruction = line.milestoneType === "constructionPayment";
+    const count = isConstruction
+      ? constructionCountFor(quoteDate, targetDate)
+      : Math.max(1, Number(packet.paymentConfiguration?.postDeliveryMonths ?? 1));
+    const { each, residue } = splitEqually(amount, count);
+    if (residue > 0n) residues.push({ milestoneType: line.milestoneType, count, residueMinor: residue });
+    for (let index = 0; index < count; index += 1) {
+      // Obra: arranca dos meses después de la cotización. Post-entrega: el mes
+      // siguiente a la entrega. Si el tramo no entra, `count` vale 1 y el pago
+      // se ancla a la entrega en vez de caer fuera del cronograma.
+      const natural = isConstruction ? addMonths(quoteDate, index + 2) : addMonths(targetDate, index + 1);
+      const dueDate = isConstruction && targetDate && natural > targetDate ? targetDate : natural;
+      installments.push({
+        position: installments.length + 1,
+        label: count === 1 ? labelFor(line.milestoneType) : `Cuota ${index + 1}`,
+        dueDate,
+        amountMinor: each,
+        kind: isConstruction ? "construction" : "postDelivery",
+      });
+    }
+  }
+
   const scheduledMinor = installments.reduce((sum, item) => sum + item.amountMinor, 0n);
-  const varianceMinor = scheduledMinor - priceMinor;
+  const residueMinor = residues.reduce((sum, item) => sum + item.residueMinor, 0n);
+  // Invariante: lo proyectado más el residuo truncado reconstruye el precio
+  // exacto. El residuo no es una diferencia inexplicada — `splitEqually` lo
+  // acota a `0 <= residuo < cantidad de cuotas` y se reporta aquí.
+  const varianceMinor = scheduledMinor + residueMinor - priceMinor;
   if (varianceMinor !== 0n) {
     const error = new Error("La configuración de pagos no concilia con el precio de la propiedad.");
     error.validation = { valid: false, errors: [{ code: "unreconciled_total", path: "paymentConfiguration", message: `${error.message} Diferencia en unidades menores: ${varianceMinor}.` }], warnings: validation.warnings };
     throw error;
   }
-  return { ...resolved, fractionDigits, priceMinor, scheduledMinor, varianceMinor, summary, installments, constructionCount, constructionPaymentMinor, constructionRemainderMinor, warnings: validation.warnings };
+  const construction = installments.filter((item) => item.kind === "construction");
+  return {
+    ...resolved,
+    fractionDigits,
+    priceMinor,
+    scheduledMinor,
+    residueMinor,
+    residues,
+    varianceMinor,
+    summary,
+    installments,
+    constructionCount: construction.length,
+    constructionPaymentMinor: construction[0]?.amountMinor ?? 0n,
+    constructionRemainderMinor: residues.find((item) => item.milestoneType === "constructionPayment")?.residueMinor ?? 0n,
+    warnings: validation.warnings,
+  };
 }
 
 export function serialize(value) {
