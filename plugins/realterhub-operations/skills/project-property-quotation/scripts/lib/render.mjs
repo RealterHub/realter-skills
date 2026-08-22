@@ -127,6 +127,13 @@ export async function renderQuotation(packet) {
   const roundingNote = calculation.differenceMinor > 0n
     ? `<p class="reconciliation">Las cuotas se muestran iguales y redondeadas al centavo; la diferencia con el precio cotizado es de ${escapeHtml(formatMoney(calculation.differenceMinor, calculation.currency, calculation.fractionDigits, locale))}.</p>`
     : "";
+  // El día de vencimiento lo respondió el asesor: si se lo preguntamos, el
+  // cliente tiene que poder verlo. La tabla se mantiene en mes/año como el
+  // formato de referencia; el día se dice una vez.
+  const paymentDay = packet.paymentConfiguration?.paymentDay;
+  const projectionNote = paymentDay && calculation.installments.some((item) => item.kind === "construction" || item.kind === "postDelivery")
+    ? `<p>Las cuotas mensuales vencen el día ${escapeHtml(paymentDay)} de cada mes.</p>`
+    : "";
   const offeringLabel = packet.quotationType === "readyProperty" && packet.propertyOffering.isNegotiable ? "Precio negociable" : "Precio cotizado";
 
   const template = await readFile(fileURLToPath(templateUrl), "utf8");
@@ -150,6 +157,7 @@ export async function renderQuotation(packet) {
     PROJECTION_ROWS: projectionRows,
     WARNINGS: warnings,
     ROUNDING_NOTE: roundingNote,
+    PROJECTION_NOTE: projectionNote,
     DISCLAIMER: escapeHtml(QUOTATION_DISCLAIMER),
   });
 }

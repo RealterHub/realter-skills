@@ -22,7 +22,7 @@ const common = () => ({
   organization: { name: "Organización Demo", logoUrl: null },
   collaborator: { fullName: "Asesor Demo" },
   contact: { id: ids.contact, fullName: "Cliente Demo" },
-  paymentConfiguration: { reservationApplication: "creditAgainstSigning", constructionMethod: "monthlyUntilTarget" },
+  paymentConfiguration: { reservationApplication: "creditAgainstSigning", constructionMethod: "monthlyUntilTarget", paymentDay: "1" },
 });
 
 const projectPacket = () => ({
@@ -414,7 +414,7 @@ test("renders a secondary browser canvas, centered porcelain sheet and full porc
   assert.doesNotMatch(html, /Cuota \d+ de \d+|>Hito<|class="basis"/);
   assert.match(html, /\.disclaimer \{[^}]+background: var\(--warning\);[^}]+border-radius: 3mm;/);
   assert.doesNotMatch(html, /\.disclaimer \{[^}]+border-left:/);
-  assert.match(html, /<section id="payment-projection" class="projection-section"><h2>Proyección de pagos<\/h2><table class="projection-table"><thead><tr><th>Concepto<\/th><th>Fecha<\/th><th>Monto<\/th><\/tr>/);
+  assert.match(html, /<section id="payment-projection" class="projection-section"><h2>Proyección de pagos<\/h2><p>Las cuotas mensuales vencen el día 1 de cada mes\.<\/p><table class="projection-table"><thead><tr><th>Concepto<\/th><th>Fecha<\/th><th>Monto<\/th><\/tr>/);
   assert.match(html, /\.projection-section \{ break-before: page; page-break-before: always;/);
   assert.doesNotMatch(html, /<th>#<\/th>|class="position"/);
 });
@@ -555,12 +555,13 @@ test("asks for the delivery date instead of blocking when the project has none",
   assert.equal(step.actions.length, 0, "no debe quedar ninguna acción irresoluble");
   // Y no pide la FECHA: pide lo único que hace falta para proyectar, que es
   // cuántas cuotas. La fecha es una forma de deducirlo, no el dato en sí.
-  const question = step.questions.find((item) => item.code === "construction_first_payment_date");
-  assert.ok(question);
-  assert.equal(question.writes, "paymentConfiguration.constructionFirstPaymentDate");
+  // Pide el día en que caen las cuotas y las fechas del tramo — nunca la fecha
+  // de entrega, que para esto no hace falta.
+  assert.ok(step.questions.some((item) => item.code === "payment_day"));
   assert.ok(!step.questions.some((item) => item.code === "target_date"));
 
   packet.paymentConfiguration = {
+    paymentDay: "15",
     constructionFirstPaymentDate: "2026-03-01", constructionLastPaymentDate: "2028-02-01",
     reservationApplication: "creditAgainstSigning", constructionMethod: "monthlyUntilTarget",
   };
@@ -569,8 +570,9 @@ test("asks for the delivery date instead of blocking when the project has none",
   // 24 meses de marzo-2026 a febrero-2028, deducidos de las fechas.
   assert.equal(result.constructionCount, 24);
   const construction = result.installments.filter((item) => item.kind === "construction");
-  assert.equal(construction[0].dueDate, "2026-03-01");
-  assert.equal(construction.at(-1).dueDate, "2028-02-01");
+  // Caen el día que respondió el asesor, no el 1 por defecto.
+  assert.equal(construction[0].dueDate, "2026-03-15");
+  assert.equal(construction.at(-1).dueDate, "2028-02-15");
   assert.equal(result.scheduledMinor + result.differenceMinor, result.priceMinor);
   // El cierre queda sin fecha, no inventada.
   assert.equal(result.installments.at(-1).dueDate, null);
@@ -581,7 +583,7 @@ test("quotes a plan with no monthly tranche and no delivery date at all", () => 
   // No hacía ninguna falta para calcular, y sin embargo bloqueaba.
   const packet = projectPacket();
   delete packet.project.estimatedHandoverDate;
-  packet.paymentConfiguration = { reservationApplication: "creditAgainstSigning" };
+  packet.paymentConfiguration = { paymentDay: "1", reservationApplication: "creditAgainstSigning" };
   packet.projectPaymentPlan.installments = [
     { position: 1, milestoneType: "reservation", amountType: "fixed", amountValue: "5000.00" },
     { position: 2, milestoneType: "contractSigning", amountType: "percentage", amountValue: "10.00" },
@@ -598,7 +600,7 @@ test("still requires the delivery date when the plan has a postDelivery tranche"
   // Ese hito se define RESPECTO de la entrega: sin esa fecha no existe.
   const packet = projectPacket();
   delete packet.project.estimatedHandoverDate;
-  packet.paymentConfiguration = { reservationApplication: "creditAgainstSigning", constructionMethod: "monthlyUntilTarget", constructionFirstPaymentDate: "2026-03-01", constructionLastPaymentDate: "2027-02-01", postDeliveryMonths: "24" };
+  packet.paymentConfiguration = { paymentDay: "1", reservationApplication: "creditAgainstSigning", constructionMethod: "monthlyUntilTarget", constructionFirstPaymentDate: "2026-03-01", constructionLastPaymentDate: "2027-02-01", postDeliveryMonths: "24" };
   packet.projectPaymentPlan.installments = [
     { position: 1, milestoneType: "contractSigning", amountType: "percentage", amountValue: "20.00" },
     { position: 2, milestoneType: "constructionPayment", amountType: "percentage", amountValue: "30.00" },
@@ -619,7 +621,7 @@ test("rejects installment dates that make no sense", () => {
   const withDates = (first, last) => {
     const packet = projectPacket();
     delete packet.project.estimatedHandoverDate;
-    packet.paymentConfiguration = { reservationApplication: "creditAgainstSigning", constructionFirstPaymentDate: first, constructionLastPaymentDate: last };
+    packet.paymentConfiguration = { paymentDay: "1", reservationApplication: "creditAgainstSigning", constructionFirstPaymentDate: first, constructionLastPaymentDate: last };
     return validatePacket(packet);
   };
   assert.equal(withDates("2027-01-01", "2026-06-01").valid, false); // última antes que la primera
@@ -635,7 +637,7 @@ test("does not ask to confirm a methodology it never applied", () => {
   const packet = projectPacket();
   delete packet.project.estimatedHandoverDate;
   packet.paymentConfiguration = {
-    reservationApplication: "creditAgainstSigning",
+    paymentDay: "1", reservationApplication: "creditAgainstSigning",
     constructionFirstPaymentDate: "2026-03-01", constructionLastPaymentDate: "2028-02-01",
   };
   assert.deepEqual(nextStep(packet).questions.map((item) => item.code), []);
@@ -643,6 +645,23 @@ test("does not ask to confirm a methodology it never applied", () => {
 
   // Con fecha de entrega sí se deriva, y ahí sí se confirma.
   const derived = projectPacket();
-  derived.paymentConfiguration = { reservationApplication: "creditAgainstSigning" };
+  derived.paymentConfiguration = { paymentDay: "1", reservationApplication: "creditAgainstSigning" };
   assert.ok(nextStep(derived).questions.some((item) => item.code === "confirm_monthly_projection"));
+});
+
+test("puts the installments on the day the advisor answered, and never assumes one", () => {
+  const packet = projectPacket();
+  packet.paymentConfiguration.paymentDay = "28";
+  const construction = calculateQuotation(packet).installments.filter((item) => item.kind === "construction");
+  assert.deepEqual(construction.slice(0, 3).map((item) => item.dueDate), ["2026-03-28", "2026-04-28", "2026-05-28"]);
+
+  // Día 31 en meses que no llegan: cae el último, y la pregunta lo dice.
+  packet.paymentConfiguration.paymentDay = "31";
+  const long = calculateQuotation(packet).installments.filter((item) => item.kind === "construction");
+  assert.deepEqual(long.slice(0, 3).map((item) => item.dueDate), ["2026-03-31", "2026-04-30", "2026-05-31"]);
+
+  // Sin respuesta no se cotiza: el día no se inventa.
+  delete packet.paymentConfiguration.paymentDay;
+  assert.ok(validatePacket(packet).errors.some((error) => error.code === "payment_day_required"));
+  assert.ok(nextStep(packet).questions.some((item) => item.code === "payment_day"));
 });
