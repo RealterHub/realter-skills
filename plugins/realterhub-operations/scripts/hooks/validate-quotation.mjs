@@ -20,7 +20,7 @@ try {
   if (typeof file !== "string" || !/(^|\/)(quotation|.+\.quotation)\.json$/i.test(file)) exit(null);
   const packet = JSON.parse(await readFile(path.resolve(file), "utf8"));
   const validation = validatePacket(packet, { final: false });
-  const incompleteCodes = new Set(["required", "terms_required", "unsupported_terms_shape"]);
+  const incompleteCodes = new Set(["required", "terms_required"]);
   const getPath = (object, dotted) => dotted.split(".").reduce((value, key) => value?.[key], object);
   const actionableErrors = validation.errors.filter((item) => {
     if (incompleteCodes.has(item.code)) return false;

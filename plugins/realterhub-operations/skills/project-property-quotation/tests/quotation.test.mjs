@@ -126,7 +126,7 @@ test("ingests the compact property areas from get_property and discards title", 
   }
 });
 
-test("distributes residual cents across installments without exposing a variance", async () => {
+test("keeps every installment identical and leaves the truncated residue unassigned", async () => {
   const packet = projectPacket();
   packet.projectUnit.basePrice = "175000.00";
   packet.project.estimatedHandoverDate = "2026-12-20";
@@ -134,14 +134,18 @@ test("distributes residual cents across installments without exposing a variance
   const construction = result.installments.filter((item) => item.kind === "construction");
   assert.equal(result.constructionCount, 9);
   assert.equal(result.constructionPaymentMinor, 583333n);
+  // Todas iguales, como en los contratos reales de RD: 52.500,00 / 9 deja
+  // 3 centavos sin asignar en vez de inflar las tres primeras cuotas.
+  assert.deepEqual(construction.map((item) => item.amountMinor), Array(9).fill(583333n));
+  assert.equal(result.residueMinor, 3n);
   assert.equal(result.constructionRemainderMinor, 3n);
-  assert.deepEqual(construction.map((item) => item.amountMinor), [583334n, 583334n, 583334n, 583333n, 583333n, 583333n, 583333n, 583333n, 583333n]);
-  assert.equal(result.scheduledMinor, result.priceMinor);
+  assert.equal(result.scheduledMinor, result.priceMinor - 3n);
+  // El residuo está acotado por construcción: 0 <= residuo < cantidad de cuotas.
+  assert.ok(result.residueMinor < BigInt(result.constructionCount));
   assert.equal(result.varianceMinor, 0n);
 
   const html = await renderQuotation(packet);
   assert.doesNotMatch(html, /Coincide con el precio cotizado/);
-  assert.doesNotMatch(html, /Redondeo:/);
 });
 
 test("keeps a reservation separate only when the percentages reconcile", () => {
@@ -177,12 +181,100 @@ test("programmatically asks for reventa payment inputs", () => {
   assert.deepEqual(next.questions.map((item) => item.code).slice(0, 2), ["signing_percentage", "target_date"]);
 });
 
-test("rejects a payment structure that cannot use the verified formula", () => {
+// Las cuatro formas siguientes existen en producción y la versión anterior las
+// rechazaba con `unsupported_terms_shape`. El plan que llega manda: el motor no
+// impone una estructura comercial.
+
+test("quotes a plan with no construction tranche (10/90)", () => {
   const packet = projectPacket();
-  packet.projectPaymentPlan.installments.push({ position: 5, milestoneType: "postDelivery", amountType: "fixed", amountValue: "500.00" });
+  packet.projectPaymentPlan.installments = [
+    { position: 1, milestoneType: "reservation", amountType: "fixed", amountValue: "5000.00" },
+    { position: 2, milestoneType: "contractSigning", amountType: "percentage", amountValue: "10.00" },
+    { position: 3, milestoneType: "closing", amountType: "percentage", amountValue: "90.00" },
+  ];
+  const result = calculateQuotation(packet);
+  assert.equal(result.constructionCount, 0);
+  assert.deepEqual(result.installments.map((item) => item.kind), ["reservation", "contractSigning", "closing"]);
+  assert.equal(result.installments[1].amountMinor, 500000n); // 10% menos la reserva acreditada
+  assert.equal(result.scheduledMinor, result.priceMinor);
+});
+
+test("quotes a plan with no reservation at all", () => {
+  const packet = projectPacket();
+  packet.projectPaymentPlan.installments = [
+    { position: 1, milestoneType: "promissoryAgreement", amountType: "percentage", amountValue: "20.00" },
+    { position: 2, milestoneType: "constructionPayment", amountType: "percentage", amountValue: "30.00" },
+    { position: 3, milestoneType: "closing", amountType: "percentage", amountValue: "50.00" },
+  ];
+  const result = calculateQuotation(packet);
+  assert.equal(result.constructionCount, 8);
+  assert.equal(result.installments[0].amountMinor, 2000000n); // firma completa: no hay reserva que descontar
+  assert.equal(result.scheduledMinor, result.priceMinor);
+  // Sin línea de reserva, el flujo no pregunta cómo aplicarla.
+  assert.ok(!nextStep(packet).questions.some((item) => item.code === "configure_reservation_application"));
+});
+
+test("quotes a plan whose last milestone is postDelivery instead of closing", () => {
+  const packet = projectPacket();
+  packet.paymentConfiguration.postDeliveryMonths = "4";
+  packet.projectPaymentPlan.installments = [
+    { position: 1, milestoneType: "reservation", amountType: "fixed", amountValue: "3000.00" },
+    { position: 2, milestoneType: "contractSigning", amountType: "percentage", amountValue: "20.00" },
+    { position: 3, milestoneType: "constructionPayment", amountType: "percentage", amountValue: "30.00" },
+    { position: 4, milestoneType: "postDelivery", amountType: "percentage", amountValue: "50.00" },
+  ];
+  const result = calculateQuotation(packet);
+  const post = result.installments.filter((item) => item.kind === "postDelivery");
+  assert.equal(post.length, 4);
+  assert.equal(post[0].amountMinor, 1250000n); // 50.000,00 / 4
+  assert.equal(post[0].dueDate, "2026-12-01"); // el mes siguiente a la entrega
+  assert.equal(result.scheduledMinor, result.priceMinor);
+});
+
+test("resolves a percentage reservation as its own slice of the price", () => {
+  const packet = projectPacket();
+  packet.paymentConfiguration.reservationApplication = "standalone";
+  packet.projectPaymentPlan.installments = [
+    { position: 1, milestoneType: "reservation", amountType: "percentage", amountValue: "10.00" },
+    { position: 2, milestoneType: "contractSigning", amountType: "percentage", amountValue: "20.00" },
+    { position: 3, milestoneType: "constructionPayment", amountType: "percentage", amountValue: "40.00" },
+    { position: 4, milestoneType: "closing", amountType: "percentage", amountValue: "30.00" },
+  ];
+  const result = calculateQuotation(packet);
+  // Antes la reserva se leía SIEMPRE como monto: "10.00" valía 10 dólares.
+  assert.equal(result.installments[0].amountMinor, 1000000n);
+  assert.equal(result.scheduledMinor, result.priceMinor);
+});
+
+test("asks for the tranche date when no monthly installment fits, instead of choosing one", () => {
+  const packet = projectPacket();
+  packet.project.estimatedHandoverDate = "2026-02-20";
+
+  // El motor no inventa ni la cantidad de pagos ni la fecha: la pide.
+  const question = nextStep(packet).questions.find((item) => item.code === "construction_payment_date");
+  assert.ok(question);
+  assert.equal(question.writes, "paymentConfiguration.constructionPaymentDate");
   const validation = validatePacket(packet);
   assert.equal(validation.valid, false);
-  assert.ok(validation.errors.some((error) => error.code === "unsupported_terms_shape"));
+  assert.ok(validation.errors.some((error) => error.path === "paymentConfiguration.constructionPaymentDate"));
+
+  // Con la fecha que puso el asesor, la cotización sale.
+  packet.paymentConfiguration.constructionPaymentDate = "2026-02-10";
+  const result = calculateQuotation(packet);
+  assert.equal(result.constructionCount, 1);
+  assert.equal(result.installments.find((item) => item.kind === "construction").dueDate, "2026-02-10");
+  assert.equal(result.scheduledMinor, result.priceMinor);
+});
+
+test("refuses to place a milestone it has no date rule for", () => {
+  const packet = projectPacket();
+  packet.projectPaymentPlan.installments = [
+    { position: 1, milestoneType: "contractSigning", amountType: "percentage", amountValue: "20.00" },
+    { position: 2, milestoneType: "other", amountType: "percentage", amountValue: "30.00" },
+    { position: 3, milestoneType: "closing", amountType: "percentage", amountValue: "50.00" },
+  ];
+  // Poner un `other` en la fecha de entrega sería inventar un plan que nadie pactó.
+  assert.throws(() => calculateQuotation(packet), /No hay regla de fecha para el hito "other"/);
 });
 
 test("ingests the real get_current_context payload (me + MCP envelope)", async () => {

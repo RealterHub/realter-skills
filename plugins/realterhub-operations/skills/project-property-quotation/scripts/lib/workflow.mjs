@@ -7,11 +7,13 @@ const ANSWERS = {
   select_quotation_type: { path: ["quotationType"], type: "enum", values: ["projectUnit", "readyProperty"] },
   reservation_amount: { path: ["paymentConfiguration", "reservationAmount"], type: "decimal" },
   signing_percentage: { path: ["paymentConfiguration", "signingPercentage"], type: "percentage" },
-  construction_percentage: { path: ["paymentConfiguration", "constructionPercentage"], type: "percentage" },
+  construction_percentage: { path: ["paymentConfiguration", "constructionPercentage"], type: "percentage", allowZero: true },
   closing_percentage: { path: ["paymentConfiguration", "closingPercentage"], type: "percentage" },
   target_date: { path: ["paymentConfiguration", "targetDate"], type: "date" },
   configure_reservation_application: { path: ["paymentConfiguration", "reservationApplication"], type: "enum", values: ["creditAgainstSigning", "standalone"] },
   confirm_monthly_projection: { path: ["paymentConfiguration", "constructionMethod"], type: "enum", values: ["monthlyUntilTarget", "unsupported"] },
+  post_delivery_months: { path: ["paymentConfiguration", "postDeliveryMonths"], type: "integer" },
+  construction_payment_date: { path: ["paymentConfiguration", "constructionPaymentDate"], type: "date" },
 };
 
 const RESOURCE_TARGETS = {
@@ -284,7 +286,12 @@ function normalizeAnswer(definition, value) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || Number.isNaN(Date.parse(`${raw}T00:00:00Z`))) throw new Error("La fecha debe usar YYYY-MM-DD.");
     return raw;
   }
-  if (!/^\d+(?:\.\d+)?$/.test(raw) || Number(raw) <= 0) throw new Error("El valor debe ser un decimal positivo sin símbolos ni separadores de miles.");
+  if (definition.type === "integer") {
+    if (!/^\d+$/.test(raw) || Number(raw) < 1) throw new Error("Debe ser un número entero de meses mayor que cero.");
+    return raw;
+  }
+  if (!/^\d+(?:\.\d+)?$/.test(raw)) throw new Error("El valor debe ser un decimal sin símbolos ni separadores de miles.");
+  if (Number(raw) <= 0 && !definition.allowZero) throw new Error("El valor debe ser mayor que cero.");
   if (definition.type === "percentage" && Number(raw) > 100) throw new Error("El porcentaje no puede exceder 100.");
   return raw;
 }
@@ -295,7 +302,13 @@ export async function recordAnswer(stateFile, code, value) {
   const packet = await loadState(stateFile);
   const currentStep = deterministicNext(packet);
   const current = currentStep.status === "answer_required" ? currentStep.question : null;
-  if (!current || current.code !== code) throw new Error(`La respuesta ${code} no es la siguiente pregunta permitida por el flujo.`);
+  // Se admite responder la pregunta actual o CORREGIR una ya respondida. Sin
+  // esto, un porcentaje mal tecleado dejaba el estado sin salida: el flujo no
+  // vuelve a preguntar, el sello impide editar el JSON e `init` no sobrescribe.
+  const answered = definition.path.reduce((node, segment) => (node == null ? undefined : node[segment]), packet) !== undefined;
+  if ((!current || current.code !== code) && !answered) {
+    throw new Error(`La respuesta ${code} no es la siguiente pregunta permitida por el flujo.`);
+  }
   let target = packet;
   for (const segment of definition.path.slice(0, -1)) target = target[segment] ??= {};
   target[definition.path.at(-1)] = normalizeAnswer(definition, value);
