@@ -197,6 +197,13 @@ export function nextStep(packet = {}) {
   if (resolved.installments.some((item) => item.milestoneType === "postDelivery") && !packet.paymentConfiguration?.postDeliveryMonths) {
     question(questions, "post_delivery_months", "¿En cuántos meses se paga el tramo posterior a la entrega?", "paymentConfiguration.postDeliveryMonths", null, { valueType: "integer" });
   }
+  const constructionLine = resolved.installments.find((item) => item.milestoneType === "constructionPayment");
+  if (constructionLine && packet.document?.date && resolved.targetDate
+      && constructionWindow(packet.document.date, resolved.targetDate) < 1
+      && !packet.paymentConfiguration?.constructionPaymentDate) {
+    const amount = constructionLine.amountType === "percentage" ? `${constructionLine.amountValue}%` : `${constructionLine.amountValue} ${resolved.currency || ""}`.trim();
+    question(questions, "construction_payment_date", `Entre la cotización y la entrega (${resolved.targetDate}) no entra ninguna cuota mensual. ¿En qué fecha se paga el tramo de ${amount}?`, "paymentConfiguration.constructionPaymentDate", null, { valueType: "date" });
+  }
   if (resolved.installments.some((item) => SERIES_MILESTONES.has(item.milestoneType)) && !packet.paymentConfiguration?.constructionMethod) {
     question(questions, "confirm_monthly_projection", "¿Confirmas cuotas mensuales iguales, comenzando dos meses después de la fecha de cotización y terminando el mes anterior al cierre o entrega?", "paymentConfiguration.constructionMethod", [
       { label: "Sí, aplicar esta metodología", value: "monthlyUntilTarget" },
@@ -274,12 +281,14 @@ function lineAmountMinor(line, priceMinor, fractionDigits) {
 /**
  * Cuántas cuotas mensuales entran entre la cotización y la entrega. La primera
  * cae dos meses después de la cotización (30 días reserva→firma, 30 más
- * firma→primera cuota) y la última el mes anterior a la entrega. Si no entra
- * ninguna, el tramo se paga de una sola vez: nunca es un error.
+ * firma→primera cuota) y la última el mes anterior a la entrega.
+ *
+ * Puede dar cero o negativo: eso NO es un error ni un pago único. Significa que
+ * la fecha de ese tramo es un dato que el plan no trae, y hay que preguntarlo
+ * en vez de que el motor elija.
  */
-function constructionCountFor(quoteDate, targetDate) {
-  if (!targetDate) return 1;
-  return Math.max(1, monthIndex(targetDate) - monthIndex(quoteDate) - 2);
+function constructionWindow(quoteDate, targetDate) {
+  return monthIndex(targetDate) - monthIndex(quoteDate) - 2;
 }
 
 /**
@@ -363,6 +372,20 @@ export function validatePacket(packet = {}, { final = true } = {}) {
   if (final && hasSeries && packet.paymentConfiguration?.constructionMethod !== "monthlyUntilTarget") {
     errors.push({ code: "construction_method_required", path: "paymentConfiguration.constructionMethod", message: "Debe confirmarse la metodología mensual de proyección." });
   }
+  // Cuántos meses dura el tramo post-entrega no está en RealterHub ni se puede
+  // derivar del plan. Sin respuesta explícita no se proyecta: un default
+  // silencioso convertiría el tramo en un pago único que nadie pactó.
+  if (final && resolved.installments.some((item) => item.milestoneType === "postDelivery") && !/^\d+$/.test(String(packet.paymentConfiguration?.postDeliveryMonths ?? ""))) {
+    errors.push({ code: "post_delivery_months_required", path: "paymentConfiguration.postDeliveryMonths", message: "Debe indicarse en cuántos meses se paga el tramo posterior a la entrega." });
+  }
+  // Ídem cuando el tramo de obra no tiene ventana mensual: la fecha es un dato
+  // del negocio, no algo que el motor pueda derivar del plan.
+  if (final && packet.document?.date && resolved.targetDate
+      && resolved.installments.some((item) => item.milestoneType === "constructionPayment")
+      && constructionWindow(packet.document.date, resolved.targetDate) < 1) {
+    required(errors, packet.paymentConfiguration?.constructionPaymentDate, "paymentConfiguration.constructionPaymentDate", "La fecha del tramo de cuotas");
+    validDate(errors, packet.paymentConfiguration?.constructionPaymentDate, "paymentConfiguration.constructionPaymentDate", "La fecha del tramo de cuotas");
+  }
   if (final && (!packet.organization?.name || !packet.collaborator?.fullName)) errors.push({ code: "unverified_identity", path: "organization", message: "No se puede generar sin la identidad de la organización y del colaborador de la conexión." });
 
   if (final && errors.length === 0) {
@@ -419,10 +442,14 @@ export function calculateQuotation(packet) {
     return milestoneLabels[milestone];
   };
 
+  // Sin regla de fecha para un hito, el motor NO elige una: la cotización se
+  // detiene. Poner un `other` en la fecha de entrega sería inventar un plan
+  // que nadie pactó.
   const milestoneDate = (milestone) => {
     if (milestone === "reservation") return quoteDate;
     if (SIGNING_MILESTONES.has(milestone)) return addMonths(quoteDate, 1);
-    return targetDate;
+    if (milestone === "closing" || milestone === "postDelivery") return targetDate;
+    throw new Error(`No hay regla de fecha para el hito "${milestone}": el plan debe declarar cuándo se paga.`);
   };
 
   // La tabla de condiciones muestra el importe BRUTO de cada línea (el % que
@@ -449,21 +476,20 @@ export function calculateQuotation(packet) {
       continue;
     }
     const isConstruction = line.milestoneType === "constructionPayment";
-    const count = isConstruction
-      ? constructionCountFor(quoteDate, targetDate)
-      : Math.max(1, Number(packet.paymentConfiguration?.postDeliveryMonths ?? 1));
+    const window = isConstruction ? constructionWindow(quoteDate, targetDate) : 0;
+    // Sin ventana mensual, la fecha del tramo la puso el asesor: el motor no
+    // elige ni cuántos pagos son ni cuándo caen.
+    const singleDate = isConstruction && window < 1 ? packet.paymentConfiguration.constructionPaymentDate : null;
+    const count = singleDate ? 1 : (isConstruction ? window : Number(packet.paymentConfiguration.postDeliveryMonths));
     const { each, residue } = splitEqually(amount, count);
     if (residue > 0n) residues.push({ milestoneType: line.milestoneType, count, residueMinor: residue });
     for (let index = 0; index < count; index += 1) {
-      // Obra: arranca dos meses después de la cotización. Post-entrega: el mes
-      // siguiente a la entrega. Si el tramo no entra, `count` vale 1 y el pago
-      // se ancla a la entrega en vez de caer fuera del cronograma.
-      const natural = isConstruction ? addMonths(quoteDate, index + 2) : addMonths(targetDate, index + 1);
-      const dueDate = isConstruction && targetDate && natural > targetDate ? targetDate : natural;
       installments.push({
         position: installments.length + 1,
         label: count === 1 ? labelFor(line.milestoneType) : `Cuota ${index + 1}`,
-        dueDate,
+        // Obra: arranca dos meses después de la cotización. Post-entrega: el
+        // mes siguiente a la entrega.
+        dueDate: singleDate ?? (isConstruction ? addMonths(quoteDate, index + 2) : addMonths(targetDate, index + 1)),
         amountMinor: each,
         kind: isConstruction ? "construction" : "postDelivery",
       });

@@ -246,14 +246,35 @@ test("resolves a percentage reservation as its own slice of the price", () => {
   assert.equal(result.scheduledMinor, result.priceMinor);
 });
 
-test("collapses the monthly tranche into one payment when handover is too soon", () => {
+test("asks for the tranche date when no monthly installment fits, instead of choosing one", () => {
   const packet = projectPacket();
   packet.project.estimatedHandoverDate = "2026-02-20";
+
+  // El motor no inventa ni la cantidad de pagos ni la fecha: la pide.
+  const question = nextStep(packet).questions.find((item) => item.code === "construction_payment_date");
+  assert.ok(question);
+  assert.equal(question.writes, "paymentConfiguration.constructionPaymentDate");
+  const validation = validatePacket(packet);
+  assert.equal(validation.valid, false);
+  assert.ok(validation.errors.some((error) => error.path === "paymentConfiguration.constructionPaymentDate"));
+
+  // Con la fecha que puso el asesor, la cotización sale.
+  packet.paymentConfiguration.constructionPaymentDate = "2026-02-10";
   const result = calculateQuotation(packet);
-  // Antes esto era `target_too_soon` y no se podía cotizar.
   assert.equal(result.constructionCount, 1);
-  assert.equal(result.installments.find((item) => item.kind === "construction").dueDate, "2026-02-20");
+  assert.equal(result.installments.find((item) => item.kind === "construction").dueDate, "2026-02-10");
   assert.equal(result.scheduledMinor, result.priceMinor);
+});
+
+test("refuses to place a milestone it has no date rule for", () => {
+  const packet = projectPacket();
+  packet.projectPaymentPlan.installments = [
+    { position: 1, milestoneType: "contractSigning", amountType: "percentage", amountValue: "20.00" },
+    { position: 2, milestoneType: "other", amountType: "percentage", amountValue: "30.00" },
+    { position: 3, milestoneType: "closing", amountType: "percentage", amountValue: "50.00" },
+  ];
+  // Poner un `other` en la fecha de entrega sería inventar un plan que nadie pactó.
+  assert.throws(() => calculateQuotation(packet), /No hay regla de fecha para el hito "other"/);
 });
 
 test("ingests the real get_current_context payload (me + MCP envelope)", async () => {

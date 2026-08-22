@@ -13,6 +13,7 @@ const ANSWERS = {
   configure_reservation_application: { path: ["paymentConfiguration", "reservationApplication"], type: "enum", values: ["creditAgainstSigning", "standalone"] },
   confirm_monthly_projection: { path: ["paymentConfiguration", "constructionMethod"], type: "enum", values: ["monthlyUntilTarget", "unsupported"] },
   post_delivery_months: { path: ["paymentConfiguration", "postDeliveryMonths"], type: "integer" },
+  construction_payment_date: { path: ["paymentConfiguration", "constructionPaymentDate"], type: "date" },
 };
 
 const RESOURCE_TARGETS = {
