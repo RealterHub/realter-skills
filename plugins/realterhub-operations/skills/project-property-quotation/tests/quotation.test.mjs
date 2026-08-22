@@ -185,6 +185,43 @@ test("rejects a payment structure that cannot use the verified formula", () => {
   assert.ok(validation.errors.some((error) => error.code === "unsupported_terms_shape"));
 });
 
+test("ingests the real get_current_context payload (me + MCP envelope)", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "realterhub-quotation-"));
+  const state = path.join(directory, "quotation.json");
+  const rawContext = path.join(directory, "context.json");
+  try {
+    await initializeState(state, "2026-01-15");
+    // Respuesta MCP completa y sin modificar, con el contrato embarcado por
+    // RealterHub: content de texto + structuredContent, colaborador en `me`.
+    const payload = {
+      organization: {
+        name: "Inmobiliaria Aurora",
+        legalName: "Aurora SRL",
+        logoUrl: "https://cdn.example.com/aurora.png",
+        preferredLanguage: "es-DO",
+      },
+      me: {
+        id: "70000000-0000-4000-8000-000000000007",
+        fullName: "Ana Gómez",
+        collaboratorType: "agent",
+        avatarUrl: null,
+        language: null,
+      },
+    };
+    await writeFile(rawContext, JSON.stringify({
+      content: [{ type: "text", text: JSON.stringify(payload) }],
+      structuredContent: payload,
+    }));
+    await ingestResource(state, "connectionContext", rawContext);
+    const saved = JSON.parse(await readFile(state, "utf8"));
+    assert.equal(saved.organization.name, "Inmobiliaria Aurora");
+    assert.equal(saved.organization.logoUrl, "https://cdn.example.com/aurora.png");
+    assert.equal(saved.collaborator.fullName, "Ana Gómez");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("exposes only one deterministic transition at a time", () => {
   const next = deterministicNext({ schemaVersion: 1, document: { date: "2026-01-15" }, paymentConfiguration: {} });
   assert.equal(next.status, "tool_required");

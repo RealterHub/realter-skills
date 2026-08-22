@@ -67,7 +67,9 @@ function normalize(resource, item) {
   const source = item ?? {};
   if (resource === "connectionContext") {
     const organization = first(source.organization, source.workspace?.organization, source.account?.organization, {});
-    const collaborator = first(source.collaborator, source.user, source.member, source.authenticatedUser, {});
+    // `me` es el contrato real de get_current_context (RealterHub); el resto son
+    // lecturas equivalentes de compatibilidad.
+    const collaborator = first(source.me, source.collaborator, source.user, source.member, source.authenticatedUser, {});
     return {
       organization: compact({
         name: first(organization.name, source.organizationName),
