@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { calculateQuotation } from "./engine.mjs";
+import { calculateQuotation, formatMoney } from "./engine.mjs";
 
 const templateUrl = new URL("../../templates/quotation.html", import.meta.url);
 export const QUOTATION_DISCLAIMER = "Esta cotización es una estimación de la proyección de pagos. No representa un acuerdo formal ni genera obligaciones entre las partes; su finalidad es ofrecer una referencia de cómo podrían distribuirse las cuotas.";
@@ -35,20 +35,6 @@ function safeImageUrl(value) {
 
 function initials(name) {
   return String(name).trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
-}
-
-function decimalSeparator(locale) {
-  return new Intl.NumberFormat(locale).formatToParts(1.1).find((part) => part.type === "decimal")?.value ?? ".";
-}
-
-export function formatMoney(minor, currency, fractionDigits, locale) {
-  const negative = minor < 0n;
-  const absolute = negative ? -minor : minor;
-  const divisor = 10n ** BigInt(fractionDigits);
-  const whole = absolute / divisor;
-  const fraction = (absolute % divisor).toString().padStart(fractionDigits, "0");
-  const grouped = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(whole);
-  return `${negative ? "−" : ""}${currency} ${grouped}${fractionDigits ? `${decimalSeparator(locale)}${fraction}` : ""}`;
 }
 
 function formatDate(value, locale, monthOnly = false) {

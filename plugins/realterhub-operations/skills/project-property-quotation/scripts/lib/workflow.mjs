@@ -16,7 +16,7 @@ const ANSWERS = {
   construction_payment_date: { path: ["paymentConfiguration", "constructionPaymentDate"], type: "date" },
   payment_day: { path: ["paymentConfiguration", "paymentDay"], type: "integer" },
   construction_first_payment_date: { path: ["paymentConfiguration", "constructionFirstPaymentDate"], type: "date" },
-  construction_last_payment_date: { path: ["paymentConfiguration", "constructionLastPaymentDate"], type: "date" },
+  construction_installment_count: { path: ["paymentConfiguration", "constructionInstallmentCount"], type: "integer" },
 };
 
 const RESOURCE_TARGETS = {
