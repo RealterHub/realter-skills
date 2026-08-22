@@ -170,12 +170,9 @@ export function nextStep(packet = {}) {
     // La fecha de entrega faltante era una ACCIÓN irresoluble: el flujo pedía el
     // detalle del proyecto una y otra vez aunque el dato no exista en la base.
     // 7 de 30 planes de producción quedaban colgados ahí, uno de ellos en obra.
-    if (packet.project?.id && packet.project?.currency && !packet.project?.estimatedHandoverDate && !packet.paymentConfiguration?.targetDate) {
-      question(questions, "target_date", `El proyecto no tiene fecha estimada de entrega cargada. ¿Cuál es la fecha prevista de entrega de "${packet.project.name}"?`, "paymentConfiguration.targetDate", null, { valueType: "date" });
-    }
-    const projectDated = packet.project?.currency && (packet.project?.estimatedHandoverDate || packet.paymentConfiguration?.targetDate);
-    if (packet.project?.id && projectDated && !packet.projectUnit?.id) action(actions, "projectUnit", ["list_project_units", "get_project_unit"], "Lista las unidades del proyecto; usa get_project_unit solo si la lista no contiene precio y código.", { projectId: packet.project.id });
-    if (packet.project?.id && projectDated && !packet.projectPaymentPlan?.id) action(actions, "projectPaymentPlan", ["get_project_payment_plan", "get_development_project"], "Carga el plan elegido. Si get_project_payment_plan no existe, ingiere paymentPlans del detalle del proyecto.", { projectId: packet.project.id });
+    // La fecha de entrega NO condiciona seguir: se cargan unidad y plan igual.
+    if (packet.project?.id && packet.project?.currency && !packet.projectUnit?.id) action(actions, "projectUnit", ["list_project_units", "get_project_unit"], "Lista las unidades del proyecto; usa get_project_unit solo si la lista no contiene precio y código.", { projectId: packet.project.id });
+    if (packet.project?.id && packet.project?.currency && !packet.projectPaymentPlan?.id) action(actions, "projectPaymentPlan", ["get_project_payment_plan", "get_development_project"], "Carga el plan elegido. Si get_project_payment_plan no existe, ingiere paymentPlans del detalle del proyecto.", { projectId: packet.project.id });
   }
 
   if (packet.quotationType === "readyProperty") {
@@ -221,7 +218,17 @@ export function nextStep(packet = {}) {
   if (resolved.installments.some((item) => item.milestoneType === "postDelivery") && !packet.paymentConfiguration?.postDeliveryMonths) {
     question(questions, "post_delivery_months", "¿En cuántos meses se paga el tramo posterior a la entrega?", "paymentConfiguration.postDeliveryMonths", null, { valueType: "integer" });
   }
+  // El tramo post-entrega SÍ necesita la fecha: el hito se define respecto de
+  // la entrega. Ningún otro caso la necesita para existir.
+  if (resolved.installments.some((item) => item.milestoneType === "postDelivery") && !resolved.targetDate) {
+    question(questions, "target_date", "El tramo posterior a la entrega se cuenta desde la entrega. ¿Cuál es la fecha prevista?", "paymentConfiguration.targetDate", null, { valueType: "date" });
+  }
+  // Sin fecha de entrega, lo que hace falta para proyectar el tramo de obra no
+  // es la fecha: es CUÁNTAS cuotas. Es lo que el cliente pregunta de verdad.
   const constructionLine = resolved.installments.find((item) => item.milestoneType === "constructionPayment");
+  if (constructionLine && !resolved.targetDate && !packet.paymentConfiguration?.constructionInstallments) {
+    question(questions, "construction_installments", "El proyecto no tiene fecha de entrega cargada. ¿En cuántas cuotas mensuales se paga el tramo de construcción?", "paymentConfiguration.constructionInstallments", null, { valueType: "integer" });
+  }
   if (constructionLine && packet.document?.date && resolved.targetDate
       && constructionWindow(packet.document.date, resolved.targetDate) < 1
       && !packet.paymentConfiguration?.constructionPaymentDate) {
@@ -372,8 +379,6 @@ export function validatePacket(packet = {}, { final = true } = {}) {
     uuid(errors, packet.projectPaymentPlan?.id, "projectPaymentPlan.id");
     validDate(errors, packet.project?.estimatedHandoverDate, "project.estimatedHandoverDate", "La fecha estimada de entrega");
     validDate(errors, packet.paymentConfiguration?.targetDate, "paymentConfiguration.targetDate", "La fecha prevista de entrega");
-    // Exigimos la fecha RESUELTA: la del proyecto o, si no está, la del asesor.
-    required(errors, resolveQuotation(packet).targetDate, "targetDate", "La fecha de entrega (del proyecto o indicada por el asesor)");
     if (packet.projectPaymentPlan?.status && packet.projectPaymentPlan.status !== "active") errors.push({ code: "inactive_plan", path: "projectPaymentPlan.status", message: "El plan del proyecto debe estar activo." });
     if (packet.project?.currency && packet.projectPaymentPlan?.currency && packet.project.currency !== packet.projectPaymentPlan.currency) errors.push({ code: "currency_mismatch", path: "projectPaymentPlan.currency", message: "La moneda del proyecto no coincide con la del plan." });
     if (packet.projectUnit?.status && !["available", "reserved"].includes(packet.projectUnit.status)) warnings.push({ code: "unit_status", path: "projectUnit.status", message: `La unidad tiene estado ${packet.projectUnit.status}.` });
@@ -416,6 +421,13 @@ export function validatePacket(packet = {}, { final = true } = {}) {
   // Cuántos meses dura el tramo post-entrega no está en RealterHub ni se puede
   // derivar del plan. Sin respuesta explícita no se proyecta: un default
   // silencioso convertiría el tramo en un pago único que nadie pactó.
+  if (final && resolved.installments.some((item) => item.milestoneType === "postDelivery") && !resolved.targetDate) {
+    errors.push({ code: "target_date_required", path: "targetDate", message: "El tramo posterior a la entrega se cuenta desde la entrega: hace falta esa fecha." });
+  }
+  if (final && resolved.installments.some((item) => item.milestoneType === "constructionPayment") && !resolved.targetDate
+      && !/^\d{1,3}$/.test(String(packet.paymentConfiguration?.constructionInstallments ?? ""))) {
+    errors.push({ code: "construction_installments_required", path: "paymentConfiguration.constructionInstallments", message: "Sin fecha de entrega, debe indicarse en cuántas cuotas mensuales se paga el tramo de construcción." });
+  }
   if (final && resolved.installments.some((item) => item.milestoneType === "postDelivery")) {
     const months = String(packet.paymentConfiguration?.postDeliveryMonths ?? "");
     // Acotado: sin techo, un número de 20 dígitos desbordaba `Date` y tiraba un
@@ -504,7 +516,9 @@ export function calculateQuotation(packet) {
   const milestoneDate = (milestone) => {
     if (milestone === "reservation") return quoteDate;
     if (SIGNING_MILESTONES.has(milestone)) return addMonths(quoteDate, 1);
-    if (milestone === "closing" || milestone === "postDelivery") return targetDate;
+    // Sin fecha de entrega el cierre queda "Por definir": el importe no cambia,
+    // y una fecha que el sistema no tiene no puede impedir cotizar.
+    if (milestone === "closing" || milestone === "postDelivery") return targetDate ?? null;
     throw new Error(`No hay regla de fecha para el hito "${milestone}": el plan debe declarar cuándo se paga.`);
   };
 
@@ -532,11 +546,15 @@ export function calculateQuotation(packet) {
       continue;
     }
     const isConstruction = line.milestoneType === "constructionPayment";
-    const window = isConstruction ? constructionWindow(quoteDate, targetDate) : 0;
+    const window = isConstruction && targetDate ? constructionWindow(quoteDate, targetDate) : 0;
     // Sin ventana mensual, la fecha del tramo la puso el asesor: el motor no
     // elige ni cuántos pagos son ni cuándo caen.
-    const singleDate = isConstruction && window < 1 ? packet.paymentConfiguration.constructionPaymentDate : null;
-    const count = singleDate ? 1 : (isConstruction ? window : Number(packet.paymentConfiguration.postDeliveryMonths));
+    const singleDate = isConstruction && targetDate && window < 1 ? packet.paymentConfiguration.constructionPaymentDate : null;
+    const count = singleDate
+      ? 1
+      : isConstruction
+        ? (targetDate ? window : Number(packet.paymentConfiguration.constructionInstallments))
+        : Number(packet.paymentConfiguration.postDeliveryMonths);
     const { each, residue } = splitEqually(amount, count);
     if (residue > 0n) residues.push({ milestoneType: line.milestoneType, count, residueMinor: residue });
     for (let index = 0; index < count; index += 1) {
@@ -564,7 +582,14 @@ export function calculateQuotation(packet) {
   // Orden cronológico. La posición del plan es comercial, no temporal: con
   // `postDelivery` la regla "el cierre va último" ubica el cierre después, pero
   // temporalmente vence ANTES que las cuotas posteriores a la entrega.
-  installments.sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : a.position - b.position));
+  // Un pago sin fecha ("Por definir") va al final: no se puede ubicar antes de
+  // algo fechado sin inventarle una fecha.
+  installments.sort((a, b) => {
+    if (!a.dueDate && !b.dueDate) return a.position - b.position;
+    if (!a.dueDate) return 1;
+    if (!b.dueDate) return -1;
+    return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : a.position - b.position;
+  });
   installments.forEach((item, index) => { item.position = index + 1; });
 
   const scheduledMinor = installments.reduce((sum, item) => sum + item.amountMinor, 0n);
