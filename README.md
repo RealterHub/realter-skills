@@ -1,8 +1,8 @@
 # Realter Skills
 
-**Tu asistente de IA, entrenado para trabajar tu sitio RealterID contigo.**
+**Skills de Realter para trabajar con RealterID y RealterHub desde tu cliente de IA.**
 
-Instala este paquete en tu cliente de IA (Claude Code o Claude) y conversa con él como con un
+Instala este paquete en ChatGPT, Codex, Claude o Claude Code y conversa con él como con un
 asistente que conoce tu negocio: te entrevista, redacta con tu voz y publica en tu sitio — con
 tu aprobación, siempre.
 
@@ -14,6 +14,13 @@ tu aprobación, siempre.
 
 ## Qué puedes hacer
 
+El marketplace se organiza por producto. `realterid` gestiona el contenido del sitio del asesor.
+`realterhub-operaciones` usa las tools del MCP de la cuenta RealterHub del usuario; su primera
+skill, `cotizacion-proyecto-propiedad`, genera cotizaciones con proyección de pagos para unidades de
+proyecto y propiedades listas o de reventa.
+
+### RealterID
+
 | Le dices... | La skill que trabaja |
 | --- | --- |
 | "Quiero definir mi marca" — te entrevista sobre quién eres, tu trayectoria y tu forma de hablar, y crea el perfil que la IA usará para escribir **como tú** | `fundamentos-de-marca` |
@@ -23,38 +30,44 @@ tu aprobación, siempre.
 | "Quiero grabar un reel de esta propiedad" — guion listo para grabar: qué mostrar, qué decir, texto en pantalla y lista de tomas | `crear-guion-video` |
 | Escribir artículos del blog, cargar testimonios, editar las páginas de tu sitio y sincronizar todo | próximamente |
 
-**Tres promesas de todas las skills:**
+**Tres promesas de las skills de RealterID:**
 1. **Nunca inventan datos tuyos ni de tus propiedades** — lo que no des, te lo preguntan o queda vacío.
 2. **Nada se publica sin que lo apruebes** — siempre ves el borrador completo antes.
 3. **Tu contenido queda en archivos en tu computadora** — tuyo, versionado, sin depender de ningún chat.
 
 ## Instalación
 
-### Claude Code (recomendado)
+### Codex y Claude Code
 
-[Claude Code](https://claude.com/claude-code) es la app de Claude para tu computadora. Con ella instalada, abre una terminal y ejecuta:
+El repositorio incluye manifiestos nativos para ambos clientes: `.codex-plugin/plugin.json` y
+`.claude-plugin/plugin.json`. En Claude Code puedes instalar el marketplace con:
 
 ```bash
 claude plugin marketplace add RealterHub/realter-skills
 claude plugin install realterid
+# En desarrollo:
+claude plugin install realterhub-operaciones
 ```
 
-Listo. Las skills se activan solas cuando conversas sobre tu marca, tus propiedades o tu contenido.
+Instala solo el plugin del producto con el que vas a trabajar. Sus skills se activan según el pedido.
 
-### Claude (claude.ai, web y escritorio)
+En Codex, instala el plugin desde el marketplace compatible de OpenAI. Durante desarrollo también
+puedes cargar directamente `plugins/realterhub-operaciones`.
+
+### ChatGPT y Claude
 
 Descarga el `.zip` de cada skill que quieras desde
-[**Releases**](https://github.com/RealterHub/realter-skills/releases) y súbelo en
-**Configuración → Capacidades → Skills**. Aquí no hay archivos locales: trabajas los borradores
-en la conversación y publicas directo a tu sitio.
+[**Releases**](https://github.com/RealterHub/realter-skills/releases). El mismo ZIP autocontenido
+sirve para las superficies de ChatGPT y Claude que permiten instalar skills y ejecutar sus scripts.
+También se puede distribuir el plugin completo mediante los directorios de plugins de cada proveedor.
 
-### ChatGPT
+Los hooks son una protección adicional en los clientes que los ejecutan. La exactitud no depende de
+ellos: preguntas, estado, fórmulas, redondeo, validaciones, integridad y HTML/PDF pertenecen al script
+determinista incluido en la skill.
 
-Estas skills están hechas para los clientes de Claude; en ChatGPT no están disponibles.
-
-> **¿Y la conexión con mi sitio?** Para publicar, tu cliente de IA se conecta a tu sitio
-> RealterID — eso se configura una sola vez desde tu panel (**Inteligencia Artificial**), que
-> te guía paso a paso. Las skills te avisan si aún no está conectado.
+> **¿Y la conexión con el producto?** Las skills que operan datos usan el MCP del producto y los
+> permisos de la cuenta conectada. La conexión se configura fuera del plugin; ninguna skill guarda
+> credenciales en sus archivos.
 
 ## Por dónde empezar
 
@@ -76,8 +89,5 @@ lo que necesites — cargar una propiedad, una página de servicio, los copies d
 
 **¿Dónde queda mi contenido?** En una carpeta en tu computadora (y en tu sitio cuando publicas). Puedes revisarla, editarla y respaldarla como cualquier archivo tuyo.
 
-**¿Sirve para otro sitio que no sea RealterID?** No — estas skills están hechas para el sitio del asesor de [RealterHub](https://realterhub.com).
-
----
-
-<sub>¿Eres desarrollador o mantienes este repo? La documentación técnica está en [docs/DESARROLLO.md](docs/DESARROLLO.md).</sub>
+**¿Todos los plugins hacen lo mismo?** No. Cada plugin pertenece a un producto o dominio y solo
+debe usar los contratos y las tools que le corresponden.

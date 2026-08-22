@@ -3,11 +3,17 @@
   "owner": {
     "name": "Realter"
   },
+  "description": "Plugins de skills para operar productos Realter desde clientes de IA conectados a sus MCP.",
   "plugins": [
     {
       "name": "realterid",
       "source": "./plugins/realterid",
       "description": "Skills de RealterID para el asesor inmobiliario: define tu marca para la IA, carga propiedades, crea servicios, artículos, testimonios, copies de redes y guiones de video, y publica en tu sitio desde tu cliente de IA."
+    },
+    {
+      "name": "realterhub-operaciones",
+      "source": "./plugins/realterhub-operaciones",
+      "description": "Skills operativas para usuarios con cuenta en RealterHub, conectadas a las tools de su MCP. Empieza con cotizaciones para unidades de proyecto y propiedades listas o de reventa."
     }
   ]
 }

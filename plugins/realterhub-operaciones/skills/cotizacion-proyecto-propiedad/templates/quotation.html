@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{DOCUMENT_TITLE}} · {{CONTACT_NAME}}</title>
+  <style>
+    :root {
+      --navy: #061B2D;
+      --navy-soft: #17304A;
+      --green: #A1CE82;
+      --warning: oklch(0.58 0.17 56.63);
+      --warning-contrast: oklch(1 0 0);
+      --info: oklch(0.5366 0.2575 262.47);
+      --porcelain: #FFFDF9;
+      --white: oklch(100% 0 0);
+      --neutral-elevated: oklch(0.966 0 0);
+      --radius-sm: 12px;
+      --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.05);
+      --muted: #586B81;
+      --line: #E4E7EC;
+    }
+    * { box-sizing: border-box; }
+    @page { size: A4; margin: 0; background: #FFFDF9; }
+    html, body { background: var(--navy); }
+    body {
+      margin: 0;
+      color: var(--navy);
+      font-family: "Schibsted Grotesk", Arial, sans-serif;
+      font-size: 11px;
+      line-height: 1.45;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .page { width: 210mm; min-height: 297mm; margin: 18px auto; padding: 12mm; background: var(--porcelain); box-shadow: 0 8px 28px rgba(6, 27, 45, .10); }
+    .brand-rule { width: 100%; height: 3px; margin: 0 0 7mm; background: var(--green); }
+    .issuer { display: flex; justify-content: space-between; align-items: center; gap: 8mm; padding-bottom: 6mm; border-bottom: 1px solid var(--line); }
+    .organization { display: flex; align-items: center; gap: 4mm; min-width: 0; }
+    .logo-shell { width: 13mm; height: 13mm; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--line); background: var(--porcelain); position: relative; flex: none; }
+    .organization-logo { width: 100%; height: 100%; object-fit: contain; padding: 1.5mm; position: relative; z-index: 2; background: var(--porcelain); }
+    .organization-fallback { color: var(--navy); font-weight: 700; font-size: 14px; position: absolute; }
+    .organization-fallback.visible { position: static; }
+    .organization h1 { margin: 0; font-size: 15px; line-height: 1.2; }
+    .organization p { margin: 1mm 0 0; color: var(--muted); }
+    .prepared-for { text-align: right; }
+    .prepared-for span { display: block; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .09em; }
+    .prepared-for strong { font-size: 14px; }
+    .title-block { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12mm; margin: 10mm 0 8mm; }
+    .eyebrow { margin: 0 0 2mm; color: var(--muted); font-weight: 700; font-size: 9px; text-transform: uppercase; letter-spacing: .12em; }
+    .title-block h2 { margin: 0; font-size: 27px; line-height: 1.08; letter-spacing: -.02em; }
+    .title-block .subtitle { margin: 2mm 0 0; color: var(--navy-soft); font-size: 13px; }
+    .subject-kind { margin: 1mm 0 0; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+    .subject-facts { min-width: 48mm; margin: 0; display: grid; grid-template-columns: auto auto; gap: 1.2mm 5mm; }
+    .subject-facts dt { color: var(--muted); }
+    .subject-facts dd { margin: 0; text-align: right; font-weight: 700; overflow-wrap: anywhere; }
+    section h2 { margin: 0 0 3mm; font-size: 12px; }
+    .totals { display: grid; grid-template-columns: 1.25fr 1.25fr .7fr; margin: 7mm 0; border: 1px solid var(--navy); }
+    .total { min-height: 22mm; padding: 4mm; border-right: 1px solid var(--navy); background: var(--porcelain); }
+    .total:last-child { border-right: 0; }
+    .total span { display: block; color: var(--muted); font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+    .total strong { display: block; margin-top: 2mm; font-size: 16px; font-variant-numeric: tabular-nums; }
+    section { margin-top: 8mm; }
+    section h2 { break-after: avoid; page-break-after: avoid; }
+    section > p { color: var(--muted); margin: -1mm 0 3mm; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--white); border: 1px solid var(--neutral-elevated); border-radius: var(--radius-sm); box-shadow: var(--shadow-xs); overflow: hidden; }
+    thead { display: table-header-group; }
+    th { padding: 2.6mm 2.2mm; text-align: left; background: var(--navy); color: var(--porcelain); font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
+    th:last-child { text-align: right; }
+    td { padding: 2.5mm 2.2mm; border-bottom: 1px solid var(--neutral-elevated); vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: 0; }
+    td:last-child, .money { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .projection-link { color: var(--info); text-decoration: none; }
+    .reconciliation { display: flex; justify-content: flex-end; margin-top: 3mm; font-size: 9px; }
+    .notice { margin-top: 4mm; padding: 3mm; border-left: 3px solid #B47B23; color: var(--navy); background: var(--porcelain); }
+    .notes { break-inside: avoid; padding: 4mm 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .notes p { margin: 0; white-space: pre-line; }
+    .disclaimer { break-inside: avoid; margin-top: 8mm; padding: 4mm 5mm; background: var(--warning); color: var(--warning-contrast); border-radius: 3mm; }
+    .disclaimer strong { display: block; margin-bottom: 1mm; font-size: 10px; }
+    .disclaimer p { margin: 0; color: inherit; }
+    footer { margin-top: 7mm; padding-top: 4mm; border-top: 1px solid var(--line); display: flex; justify-content: space-between; color: var(--muted); font-size: 8px; }
+    .realterhub-link { font-weight: 650; text-decoration: none; white-space: nowrap; }
+    .realterhub-realter { color: var(--navy); }
+    .realterhub-hub { color: var(--green); }
+    @media print {
+      html, body, .page { background: var(--porcelain) !important; }
+      .page { width: 210mm; min-height: 297mm; margin: 0; padding: 12mm; box-shadow: none; }
+      .projection-section { break-before: page; page-break-before: always; margin-top: 12mm; }
+      .projection-table td { padding: 1.8mm 2.2mm; line-height: 1.25; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="brand-rule"></div>
+
+    <div class="issuer">
+      <div class="organization">
+        <div class="logo-shell">{{ORGANIZATION_LOGO}}</div>
+        <div><h1>{{ORGANIZATION_NAME}}</h1><p>Preparado por {{COLLABORATOR_NAME}}</p></div>
+      </div>
+      <div class="prepared-for"><span>Preparado para</span><strong>{{CONTACT_NAME}}</strong><div>{{CONTACT_DETAILS}}</div></div>
+    </div>
+
+    <div class="title-block">
+      <div>
+        <p class="eyebrow">{{DOCUMENT_TITLE}} · {{DOCUMENT_DATE}}</p>
+        <h2>{{SUBJECT_TITLE}}</h2>
+        <p class="subtitle">{{SUBJECT_SUBTITLE}}</p>
+        <p class="subject-kind">{{SUBJECT_EYEBROW}}</p>
+      </div>
+      <dl class="subject-facts">{{SUBJECT_FACTS}}</dl>
+    </div>
+
+    <div class="totals">
+      <div class="total"><span>{{OFFERING_LABEL}}</span><strong>{{BASE_PRICE}}</strong></div>
+      <div class="total"><span>Total proyectado</span><strong>{{PROJECTED_TOTAL}}</strong></div>
+      <div class="total"><span>Pagos a realizar</span><strong>{{PAYMENT_COUNT}}</strong></div>
+    </div>
+
+    <section><h2>Condiciones de pago</h2><table><thead><tr><th>Concepto</th><th>Base</th><th>Monto</th><th>Fecha</th></tr></thead><tbody>{{SUMMARY_ROWS}}</tbody></table></section>
+    {{NOTES}}
+    <section id="payment-projection" class="projection-section"><h2>Proyección de pagos</h2><table class="projection-table"><thead><tr><th>Concepto</th><th>Fecha</th><th>Monto</th></tr></thead><tbody>{{PROJECTION_ROWS}}</tbody></table>{{WARNINGS}}</section>
+
+    <aside class="disclaimer"><strong>Importante</strong><p>{{DISCLAIMER}}</p></aside>
+    <footer><span>Generado con Tecnología <a class="realterhub-link" href="https://realterhub.com" aria-label="RealterHub"><span class="realterhub-realter">Realter</span><span class="realterhub-hub">Hub</span></a></span><span>Vender más. Operar menos. Cobrar antes.</span></footer>
+  </main>
+</body>
+</html>

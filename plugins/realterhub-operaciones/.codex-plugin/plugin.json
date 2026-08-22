@@ -1,0 +1,19 @@
+{
+  "name": "realterhub-operaciones",
+  "version": "0.1.0",
+  "description": "Genera cotizaciones inmobiliarias deterministas con datos obtenidos de RealterHub.",
+  "author": {
+    "name": "Realter"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "RealterHub Operaciones",
+    "shortDescription": "Cotizaciones operativas con datos de RealterHub",
+    "longDescription": "Flujos operativos deterministas para usuarios de RealterHub, comenzando con cotizaciones de unidades de proyecto y propiedades listas o de reventa.",
+    "developerName": "Realter",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "brandColor": "#061B2D",
+    "defaultPrompt": "Prepara una cotización para una unidad de proyecto o una propiedad lista usando los datos de mi cuenta RealterHub."
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/hooks/validate-quotation.mjs\"",
+            "timeout": 15,
+            "statusMessage": "Validando los datos de la cotización..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/hooks/block-direct-quotation-edit.mjs\"",
+            "timeout": 15,
+            "statusMessage": "Protegiendo el estado determinista de la cotización..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/scripts/hooks/gate-quotation-generation.mjs\"",
+            "timeout": 15,
+            "statusMessage": "Comprobando el plan antes de generar..."
+          }
+        ]
+      }
+    ]
+  }
+}

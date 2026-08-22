@@ -1,0 +1,20 @@
+{
+  "name": "realter-skills",
+  "interface": {
+    "displayName": "Realter Skills"
+  },
+  "plugins": [
+    {
+      "name": "realterhub-operaciones",
+      "source": {
+        "source": "local",
+        "path": "./plugins/realterhub-operaciones"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

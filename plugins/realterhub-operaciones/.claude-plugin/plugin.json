@@ -1,0 +1,11 @@
+{
+  "name": "realterhub-operaciones",
+  "displayName": "RealterHub Operaciones",
+  "version": "0.1.0",
+  "description": "Asiste procesos operativos de RealterHub con datos reales obtenidos mediante su MCP. Incluye cotizaciones inmobiliarias deterministas en HTML y PDF.",
+  "author": {
+    "name": "Realter"
+  },
+  "license": "MIT",
+  "keywords": ["realter", "realterhub", "operaciones", "real-estate", "mcp"]
+}

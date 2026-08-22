@@ -1,29 +1,26 @@
 #!/usr/bin/env node
 /**
- * Genera un .zip por skill para subir a claude.ai (Configuración → Capacidades → Skills).
+ * Genera un .zip autocontenido por skill para clientes que aceptan skills por archivo,
+ * incluidos ChatGPT y Claude.
  *
  * Cada zip contiene la carpeta de la skill (SKILL.md en su raíz) con las guías compartidas
- * de `plugins/realterid/guides/` inyectadas en `references/` para que la skill sea
- * autocontenida fuera del plugin.
+ * de su propio plugin inyectadas en `references/` para que sea autocontenida fuera del plugin.
  *
- * ⚠️ Los **hooks NO viajan en los zips**, y no es un olvido: `hooks/hooks.json` y
- * `scripts/hooks/` son un mecanismo de Claude Code, y claude.ai no los ejecuta. Este build
- * solo empaqueta `skills/` + `guides/`, así que quedan fuera por construcción. La validación
- * que allí desaparece la sigue haciendo el MCP del sitio, que valida en todos los clientes
- * (ver "Calidad en capas" en el README).
+ * Los hooks no viajan en los zips: son defensas adicionales de los hosts que los ejecutan.
+ * Las garantías portables permanecen en el script de la skill: flujo de estados, cálculos,
+ * validaciones, sello de integridad y renderizado.
  *
  * Node puro, sin dependencias (zlib para deflate, CRC32 propio).
  * Uso: node scripts/build-zips.mjs   → escribe en dist/
  */
 
 import { deflateRawSync } from 'node:zlib'
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const SKILLS_DIR = join(ROOT, 'plugins', 'realterid', 'skills')
-const GUIDES_DIR = join(ROOT, 'plugins', 'realterid', 'guides')
+const PLUGINS_DIR = join(ROOT, 'plugins')
 const OUT_DIR = join(ROOT, 'dist')
 
 // ---------- CRC32 ----------
@@ -111,27 +108,47 @@ const walk = (dir, base = '') =>
 
 // ---------- build ----------
 mkdirSync(OUT_DIR, { recursive: true })
-const guides = walk(GUIDES_DIR)
-const skills = readdirSync(SKILLS_DIR).filter((s) => statSync(join(SKILLS_DIR, s)).isDirectory())
+const outputNames = new Map()
+const plugins = readdirSync(PLUGINS_DIR).filter((plugin) => {
+  const skillsDir = join(PLUGINS_DIR, plugin, 'skills')
+  return existsSync(skillsDir) && statSync(skillsDir).isDirectory()
+})
 
-for (const skill of skills) {
-  const skillDir = join(SKILLS_DIR, skill)
-  const entries = []
-  const seen = new Set()
+for (const plugin of plugins) {
+  const pluginDir = join(PLUGINS_DIR, plugin)
+  const skillsDir = join(pluginDir, 'skills')
+  const guidesDir = join(pluginDir, 'guides')
+  const guides = existsSync(guidesDir) ? walk(guidesDir) : []
+  const skills = readdirSync(skillsDir).filter((skill) => statSync(join(skillsDir, skill)).isDirectory())
 
-  for (const { rel, abs } of walk(skillDir)) {
-    entries.push({ name: `${skill}/${rel}`, data: readFileSync(abs) })
-    seen.add(`${skill}/${rel}`)
+  for (const skill of skills) {
+    const previousPlugin = outputNames.get(skill)
+    if (previousPlugin) {
+      throw new Error(
+        `No se puede generar dist/${skill}.zip: la skill existe en ${previousPlugin} y ${plugin}. ` +
+          'Usa nombres de skill únicos entre plugins.',
+      )
+    }
+    outputNames.set(skill, plugin)
+
+    const skillDir = join(skillsDir, skill)
+    const entries = []
+    const seen = new Set()
+
+    for (const { rel, abs } of walk(skillDir)) {
+      entries.push({ name: `${skill}/${rel}`, data: readFileSync(abs) })
+      seen.add(`${skill}/${rel}`)
+    }
+    // Inyectar solo las guías del plugin propietario de la skill.
+    for (const { rel, abs } of guides) {
+      const name = `${skill}/references/${rel}`
+      if (!seen.has(name)) entries.push({ name, data: readFileSync(abs) })
+    }
+
+    entries.sort((a, b) => a.name.localeCompare(b.name))
+    const zip = buildZip(entries)
+    const out = join(OUT_DIR, `${skill}.zip`)
+    writeFileSync(out, zip)
+    console.log(`✓ ${out} [${plugin}] (${entries.length} archivos, ${(zip.length / 1024).toFixed(1)} KB)`)
   }
-  // Inyectar las guías compartidas en references/ (autocontención para claude.ai).
-  for (const { rel, abs } of guides) {
-    const name = `${skill}/references/${rel}`
-    if (!seen.has(name)) entries.push({ name, data: readFileSync(abs) })
-  }
-
-  entries.sort((a, b) => a.name.localeCompare(b.name))
-  const zip = buildZip(entries)
-  const out = join(OUT_DIR, `${skill}.zip`)
-  writeFileSync(out, zip)
-  console.log(`✓ ${out} (${entries.length} archivos, ${(zip.length / 1024).toFixed(1)} KB)`)
 }
