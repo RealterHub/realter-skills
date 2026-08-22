@@ -562,12 +562,12 @@ test("asks for the delivery date instead of blocking when the project has none",
 
   packet.paymentConfiguration = {
     paymentDay: "15",
-    constructionFirstPaymentDate: "2026-03-01", constructionLastPaymentDate: "2028-02-01",
+    constructionFirstPaymentDate: "2026-03-01", constructionInstallmentCount: "24",
     reservationApplication: "creditAgainstSigning", constructionMethod: "monthlyUntilTarget",
   };
   assert.equal(validatePacket(packet).valid, true);
   const result = calculateQuotation(packet);
-  // 24 meses de marzo-2026 a febrero-2028, deducidos de las fechas.
+  // 24 cuotas desde marzo-2026: la última cae sola en febrero-2028.
   assert.equal(result.constructionCount, 24);
   const construction = result.installments.filter((item) => item.kind === "construction");
   // Caen el día que respondió el asesor, no el 1 por defecto.
@@ -600,7 +600,7 @@ test("still requires the delivery date when the plan has a postDelivery tranche"
   // Ese hito se define RESPECTO de la entrega: sin esa fecha no existe.
   const packet = projectPacket();
   delete packet.project.estimatedHandoverDate;
-  packet.paymentConfiguration = { paymentDay: "1", reservationApplication: "creditAgainstSigning", constructionMethod: "monthlyUntilTarget", constructionFirstPaymentDate: "2026-03-01", constructionLastPaymentDate: "2027-02-01", postDeliveryMonths: "24" };
+  packet.paymentConfiguration = { paymentDay: "1", reservationApplication: "creditAgainstSigning", constructionMethod: "monthlyUntilTarget", constructionFirstPaymentDate: "2026-03-01", constructionInstallmentCount: "12", postDeliveryMonths: "24" };
   packet.projectPaymentPlan.installments = [
     { position: 1, milestoneType: "contractSigning", amountType: "percentage", amountValue: "20.00" },
     { position: 2, milestoneType: "constructionPayment", amountType: "percentage", amountValue: "30.00" },
@@ -617,17 +617,19 @@ test("prefers the project's own handover date over the advisor's answer", () => 
   assert.equal(calculateQuotation(packet).targetDate, "2026-11-20");
 });
 
-test("rejects installment dates that make no sense", () => {
-  const withDates = (first, last) => {
+test("rejects a start month or an installment count that make no sense", () => {
+  const withSchedule = (first, count) => {
     const packet = projectPacket();
     delete packet.project.estimatedHandoverDate;
-    packet.paymentConfiguration = { paymentDay: "1", reservationApplication: "creditAgainstSigning", constructionFirstPaymentDate: first, constructionLastPaymentDate: last };
+    packet.paymentConfiguration = { paymentDay: "1", reservationApplication: "creditAgainstSigning", constructionFirstPaymentDate: first, constructionInstallmentCount: count };
     return validatePacket(packet);
   };
-  assert.equal(withDates("2027-01-01", "2026-06-01").valid, false); // última antes que la primera
-  assert.equal(withDates("2025-01-01", "2026-06-01").valid, false); // primera antes de la cotización
-  assert.equal(withDates("2026-03-01", "2086-03-01").valid, false); // 60 años de cuotas
-  assert.equal(withDates("2026-03-01", "2028-02-01").valid, true);
+  assert.equal(withSchedule("2025-01-01", "24").valid, false); // arranca antes de la cotización
+  assert.equal(withSchedule("2026-03-01", "0").valid, false); // cero cuotas no es un tramo
+  assert.equal(withSchedule("2026-03-01", "-3").valid, false);
+  assert.equal(withSchedule("2026-03-01", "12.5").valid, false); // media cuota no existe
+  assert.equal(withSchedule("2026-03-01", "720").valid, false); // 60 años de cuotas
+  assert.equal(withSchedule("2026-03-01", "24").valid, true);
 });
 
 test("does not ask to confirm a methodology it never applied", () => {
@@ -638,7 +640,7 @@ test("does not ask to confirm a methodology it never applied", () => {
   delete packet.project.estimatedHandoverDate;
   packet.paymentConfiguration = {
     paymentDay: "1", reservationApplication: "creditAgainstSigning",
-    constructionFirstPaymentDate: "2026-03-01", constructionLastPaymentDate: "2028-02-01",
+    constructionFirstPaymentDate: "2026-03-01", constructionInstallmentCount: "24",
   };
   assert.deepEqual(nextStep(packet).questions.map((item) => item.code), []);
   assert.equal(validatePacket(packet).valid, true);
@@ -664,4 +666,65 @@ test("puts the installments on the day the advisor answered, and never assumes o
   delete packet.paymentConfiguration.paymentDay;
   assert.ok(validatePacket(packet).errors.some((error) => error.code === "payment_day_required"));
   assert.ok(nextStep(packet).questions.some((item) => item.code === "payment_day"));
+});
+
+test("asks how many installments, and the last one falls where it falls", async () => {
+  // El cliente llega cuando llega: el mes de arranque lo pone el asesor y la
+  // cantidad de cuotas es lo que se pacta. Preguntar la fecha de la ÚLTIMA era
+  // pedir un dato que nadie negocia — sale de sumar.
+  const packet = projectPacket();
+  delete packet.project.estimatedHandoverDate;
+  packet.paymentConfiguration = { reservationApplication: "creditAgainstSigning", paymentDay: "5" };
+
+  assert.deepEqual(nextStep(packet).questions.map((item) => item.code), ["construction_first_payment_date"]);
+  packet.paymentConfiguration.constructionFirstPaymentDate = "2026-10-01";
+
+  const asked = nextStep(packet).questions;
+  assert.deepEqual(asked.map((item) => item.code), ["construction_installment_count"]);
+  // La pregunta dice el importe que se está repartiendo, no un nombre de hito.
+  assert.match(asked[0].prompt, /USD 30,000\.00/);
+
+  packet.paymentConfiguration.constructionInstallmentCount = "36";
+  assert.equal(validatePacket(packet).valid, true);
+
+  const result = calculateQuotation(packet);
+  const construction = result.installments.filter((item) => item.kind === "construction");
+  assert.equal(construction.length, 36);
+  assert.equal(construction[0].dueDate, "2026-10-05");
+  assert.equal(construction.at(-1).dueDate, "2029-09-05", "la última cae sola 35 meses después");
+  assert.equal(result.scheduledMinor + result.differenceMinor, result.priceMinor);
+  assert.ok((await renderQuotation(packet)).includes("Cuota 36"));
+});
+
+test("offers the reservation choice in money, and only when it can be answered", () => {
+  const packet = projectPacket();
+  delete packet.paymentConfiguration.reservationApplication;
+
+  const question = nextStep(packet).questions.find((item) => item.code === "configure_reservation_application");
+  // Precio 100,000 · reserva 3,000 · firma 20% = 20,000.
+  assert.match(question.prompt, /reserva de USD 3,000\.00/);
+  assert.match(question.prompt, /precio de la unidad es USD 100,000\.00/);
+  assert.deepEqual(question.options.map((item) => item.value), ["creditAgainstSigning", "standalone"]);
+  // Cada opción dice lo que el cliente pone en la firma y lo que suma el plan.
+  assert.match(question.options[0].label, /completa USD 17,000\.00/);
+  assert.match(question.options[0].label, /suma USD 100,000\.00/);
+  assert.match(question.options[1].label, /paga USD 20,000\.00/);
+  assert.match(question.options[1].label, /suma USD 103,000\.00/);
+
+  // Descontar sólo se ofrece si la reserva CABE en el pago siguiente; si no,
+  // esa opción daría un importe negativo y validate la rechazaría después.
+  const oversized = projectPacket();
+  delete oversized.paymentConfiguration.reservationApplication;
+  oversized.projectPaymentPlan.installments[0].amountValue = "30000.00";
+  const only = nextStep(oversized).questions.find((item) => item.code === "configure_reservation_application");
+  assert.deepEqual(only.options.map((item) => item.value), ["standalone"]);
+
+  // Sin precio no hay importes que mostrar. `ingest` ya rechaza una unidad sin
+  // basePrice, así que el flujo real no llega acá; la guarda existe para que
+  // `nextStep` no reviente formateando, y `validate` sigue diciendo qué falta.
+  const priceless = projectPacket();
+  delete priceless.paymentConfiguration.reservationApplication;
+  delete priceless.projectUnit.basePrice;
+  assert.ok(!nextStep(priceless).questions.some((item) => item.code === "configure_reservation_application"));
+  assert.ok(validatePacket(priceless).errors.some((error) => error.path === "projectUnit.basePrice"));
 });

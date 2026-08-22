@@ -55,6 +55,20 @@ function addMonths(date, count, day = 1) {
   return target.toISOString().slice(0, 10);
 }
 
+function decimalSeparator(locale) {
+  return new Intl.NumberFormat(locale).formatToParts(1.1).find((part) => part.type === "decimal")?.value ?? ".";
+}
+
+export function formatMoney(minor, currency, fractionDigits, locale) {
+  const negative = minor < 0n;
+  const absolute = negative ? -minor : minor;
+  const divisor = 10n ** BigInt(fractionDigits);
+  const whole = absolute / divisor;
+  const fraction = (absolute % divisor).toString().padStart(fractionDigits, "0");
+  const grouped = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(whole);
+  return `${negative ? "−" : ""}${currency} ${grouped}${fractionDigits ? `${decimalSeparator(locale)}${fraction}` : ""}`;
+}
+
 function required(errors, value, path, label) {
   if (value === undefined || value === null || String(value).trim() === "") {
     errors.push({ code: "required", path, message: `${label} es obligatorio.` });
@@ -213,16 +227,41 @@ export function nextStep(packet = {}) {
     validateInstallments(shapeErrors, resolved.installments);
     for (const item of shapeErrors) blockers.push({ code: item.code, message: item.message });
   }
+  // El plan puede llegar antes que la unidad: sin precio no hay importes que
+  // mostrar, y la acción que carga la unidad ya está encolada. Las preguntas
+  // que hablan de dinero esperan a ese dato en vez de romper.
+  const quotedPriceMinor = decimalParts(String(resolved.price ?? "")) ? decimalToMinor(resolved.price) : null;
+  const money = (minor) => formatMoney(minor, resolved.currency || "", 2, packet.document?.locale || "es-DO");
+
   const reservationLine = resolved.installments.find((item) => item.milestoneType === "reservation");
   const creditTarget = creditTargetOf(resolved.installments);
   // Acreditar la reserva sólo tiene sentido si hay un pago siguiente al que
   // descontársela — no hace falta que ese pago se llame "firma".
-  if (reservationLine && creditTarget && !["creditAgainstSigning", "standalone"].includes(packet.paymentConfiguration?.reservationApplication)) {
-    const amount = reservationLine.amountType === "percentage" ? `${reservationLine.amountValue}%` : `${reservationLine.amountValue} ${resolved.currency || ""}`.trim();
-    question(questions, "configure_reservation_application", `¿Cómo debe aplicarse la reserva de ${amount}?`, "paymentConfiguration.reservationApplication", [
-      { label: `Descontar de "${milestoneLabels[creditTarget.milestoneType]}"`, value: "creditAgainstSigning" },
-      { label: "Mantener como pago separado", value: "standalone" },
-    ]);
+  //
+  // Las dos opciones se ofrecen EN DINERO, no con el nombre de la práctica: la
+  // pregunta "cómo se aplica la reserva" es jerga que ni el asesor sabe
+  // contestar. Lo que decide es cuánto pone el cliente en el pago siguiente y
+  // cuánto suma el plan; eso se calcula acá y se muestra en cada opción.
+  if (reservationLine && creditTarget && quotedPriceMinor !== null && !["creditAgainstSigning", "standalone"].includes(packet.paymentConfiguration?.reservationApplication)) {
+    const priceMinor = quotedPriceMinor;
+    const reservationMinor = lineAmountMinor(reservationLine, priceMinor, 2);
+    const targetGrossMinor = lineAmountMinor(creditTarget, priceMinor, 2);
+    const linesTotalMinor = resolved.installments.reduce((sum, line) => sum + lineAmountMinor(line, priceMinor, 2), 0n);
+    const targetLabel = milestoneLabels[creditTarget.milestoneType];
+    const options = [];
+    // Sólo se ofrece descontar si la reserva cabe en el pago siguiente; si no,
+    // esa opción daría un importe negativo y `validate` la rechazaría después.
+    if (reservationMinor <= targetGrossMinor) {
+      options.push({
+        label: `Sí, es un abono: en "${targetLabel}" completa ${money(targetGrossMinor - reservationMinor)} (el plan suma ${money(linesTotalMinor - reservationMinor)})`,
+        value: "creditAgainstSigning",
+      });
+    }
+    options.push({
+      label: `No, es adicional: en "${targetLabel}" paga ${money(targetGrossMinor)} completos (el plan suma ${money(linesTotalMinor)})`,
+      value: "standalone",
+    });
+    question(questions, "configure_reservation_application", `La reserva de ${money(reservationMinor)} ¿se descuenta del pago de "${targetLabel}"? El precio de la unidad es ${money(priceMinor)}.`, "paymentConfiguration.reservationApplication", options);
   }
   if (resolved.installments.some((item) => item.milestoneType === "postDelivery") && !packet.paymentConfiguration?.postDeliveryMonths) {
     question(questions, "post_delivery_months", "¿En cuántos meses se paga el tramo posterior a la entrega?", "paymentConfiguration.postDeliveryMonths", null, { valueType: "integer" });
@@ -239,13 +278,15 @@ export function nextStep(packet = {}) {
     question(questions, "payment_day", "¿Qué día de cada mes caen las cuotas? (1 al 31; en los meses que no llegan a ese día, cae el último)", "paymentConfiguration.paymentDay", null, { valueType: "integer" });
   }
   const constructionLine = resolved.installments.find((item) => item.milestoneType === "constructionPayment");
-  // Lo que arma la tabla son las FECHAS. La cantidad de cuotas se deduce de
-  // ellas; preguntar "cuántas" obligaba además a asumir desde cuándo arrancan.
+  // Cuándo EMPIEZA a pagar depende del cliente: llega antes de la obra, en
+  // medio o casi terminada. Cuántas cuotas es lo que se pacta con él. La fecha
+  // de la última NO se pregunta — sale sola del mes de arranque más el conteo.
   if (constructionLine && !resolved.targetDate) {
     if (!packet.paymentConfiguration?.constructionFirstPaymentDate) {
-      question(questions, "construction_first_payment_date", "El proyecto no tiene fecha de entrega cargada. ¿En qué mes se paga la PRIMERA cuota de construcción?", "paymentConfiguration.constructionFirstPaymentDate", null, { valueType: "date" });
-    } else if (!packet.paymentConfiguration?.constructionLastPaymentDate) {
-      question(questions, "construction_last_payment_date", "¿Y en qué mes se paga la ÚLTIMA?", "paymentConfiguration.constructionLastPaymentDate", null, { valueType: "date" });
+      question(questions, "construction_first_payment_date", "¿En qué mes empieza a pagar las cuotas mensuales?", "paymentConfiguration.constructionFirstPaymentDate", null, { valueType: "date" });
+    } else if (!packet.paymentConfiguration?.constructionInstallmentCount && quotedPriceMinor !== null) {
+      const amount = money(lineAmountMinor(constructionLine, quotedPriceMinor, 2));
+      question(questions, "construction_installment_count", `¿En cuántas cuotas mensuales se reparte ${amount}?`, "paymentConfiguration.constructionInstallmentCount", null, { valueType: "integer" });
     }
   }
   if (constructionLine && packet.document?.date && resolved.targetDate
@@ -455,15 +496,20 @@ export function validatePacket(packet = {}, { final = true } = {}) {
   }
   if (final && resolved.installments.some((item) => item.milestoneType === "constructionPayment") && !resolved.targetDate) {
     const first = packet.paymentConfiguration?.constructionFirstPaymentDate;
-    const last = packet.paymentConfiguration?.constructionLastPaymentDate;
+    const count = packet.paymentConfiguration?.constructionInstallmentCount;
     validDate(errors, first, "paymentConfiguration.constructionFirstPaymentDate", "La fecha de la primera cuota");
-    validDate(errors, last, "paymentConfiguration.constructionLastPaymentDate", "La fecha de la última cuota");
-    if (!first || !last) {
-      errors.push({ code: "construction_dates_required", path: "paymentConfiguration.constructionFirstPaymentDate", message: "Sin fecha de entrega, deben indicarse la primera y la última cuota del tramo de construcción." });
-    } else if (isRealDate(first) && isRealDate(last)) {
-      if (monthIndex(last) < monthIndex(first)) errors.push({ code: "construction_dates_inverted", path: "paymentConfiguration.constructionLastPaymentDate", message: "La última cuota no puede caer antes que la primera." });
-      else if (monthIndex(first) < monthIndex(packet.document?.date ?? first)) errors.push({ code: "construction_dates_inverted", path: "paymentConfiguration.constructionFirstPaymentDate", message: "La primera cuota no puede caer antes del mes de la cotización." });
-      else if (monthIndex(last) - monthIndex(first) + 1 > MAX_SERIES_MONTHS) errors.push({ code: "construction_dates_inverted", path: "paymentConfiguration.constructionLastPaymentDate", message: `El tramo no puede superar ${MAX_SERIES_MONTHS} cuotas mensuales.` });
+    if (!first || count === undefined || count === null || String(count).trim() === "") {
+      errors.push({ code: "construction_schedule_required", path: "paymentConfiguration.constructionFirstPaymentDate", message: "Sin fecha de entrega, deben indicarse el mes de la primera cuota y en cuántas cuotas se reparte el tramo." });
+    } else {
+      if (!/^[1-9]\d*$/.test(String(count).trim()) || Number(count) > MAX_SERIES_MONTHS) {
+        errors.push({ code: "construction_count_invalid", path: "paymentConfiguration.constructionInstallmentCount", message: `La cantidad de cuotas debe ser un entero entre 1 y ${MAX_SERIES_MONTHS}.` });
+      }
+      // La primera cuota puede caer en un mes ya vencido sólo si el cliente
+      // entró después: eso lo decide el asesor, no el motor. Lo único que se
+      // rechaza es una cotización que arranque antes de existir.
+      if (isRealDate(first) && monthIndex(first) < monthIndex(packet.document?.date ?? first)) {
+        errors.push({ code: "construction_start_before_quotation", path: "paymentConfiguration.constructionFirstPaymentDate", message: "La primera cuota no puede caer antes del mes de la cotización." });
+      }
     }
   }
   if (final && resolved.installments.some((item) => item.milestoneType === "postDelivery")) {
@@ -590,12 +636,12 @@ export function calculateQuotation(packet) {
     // elige ni cuántos pagos son ni cuándo caen.
     const singleDate = isConstruction && targetDate && window < 1 ? packet.paymentConfiguration.constructionPaymentDate : null;
     const answeredFirst = packet.paymentConfiguration?.constructionFirstPaymentDate;
-    const answeredLast = packet.paymentConfiguration?.constructionLastPaymentDate;
-    const answeredSeries = isConstruction && !targetDate && answeredFirst && answeredLast;
+    const answeredCount = packet.paymentConfiguration?.constructionInstallmentCount;
+    const answeredSeries = isConstruction && !targetDate && answeredFirst && answeredCount;
     const count = singleDate
       ? 1
       : isConstruction
-        ? (targetDate ? window : monthIndex(answeredLast) - monthIndex(answeredFirst) + 1)
+        ? (targetDate ? window : Number(answeredCount))
         : Number(packet.paymentConfiguration.postDeliveryMonths);
     const { each, residue } = splitEqually(amount, count);
     if (residue > 0n) residues.push({ milestoneType: line.milestoneType, count, residueMinor: residue });
