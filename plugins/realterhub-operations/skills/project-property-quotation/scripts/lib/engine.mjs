@@ -124,7 +124,10 @@ export function resolveQuotation(packet) {
       subjectCode: packet.projectUnit?.code,
       price: packet.projectUnit?.basePrice,
       currency: packet.projectPaymentPlan?.currency,
-      targetDate: packet.project?.estimatedHandoverDate,
+      // El sistema manda cuando tiene el dato. Cuando no lo tiene, vale la fecha
+      // que puso el asesor: que RealterHub no la haya cargado no es motivo para
+      // dejar a un proyecto en obra sin poder cotizarse.
+      targetDate: packet.project?.estimatedHandoverDate || packet.paymentConfiguration?.targetDate,
       sourceId: packet.projectPaymentPlan?.id,
       installments: projectTerms(packet),
     };
@@ -163,9 +166,16 @@ export function nextStep(packet = {}) {
 
   if (packet.quotationType === "projectUnit") {
     if (!packet.project?.id) action(actions, "project", ["list_development_projects"], "Busca proyectos y entrega la respuesta completa al comando ingest.");
-    else if (!packet.project.currency || !packet.project.estimatedHandoverDate) action(actions, "project", ["get_development_project"], "Carga el detalle del proyecto seleccionado.", { id: packet.project.id });
-    if (packet.project?.id && packet.project?.currency && packet.project?.estimatedHandoverDate && !packet.projectUnit?.id) action(actions, "projectUnit", ["list_project_units", "get_project_unit"], "Lista las unidades del proyecto; usa get_project_unit solo si la lista no contiene precio y código.", { projectId: packet.project.id });
-    if (packet.project?.id && packet.project?.currency && packet.project?.estimatedHandoverDate && !packet.projectPaymentPlan?.id) action(actions, "projectPaymentPlan", ["get_project_payment_plan", "get_development_project"], "Carga el plan elegido. Si get_project_payment_plan no existe, ingiere paymentPlans del detalle del proyecto.", { projectId: packet.project.id });
+    else if (!packet.project.currency) action(actions, "project", ["get_development_project"], "Carga el detalle del proyecto seleccionado.", { id: packet.project.id });
+    // La fecha de entrega faltante era una ACCIÓN irresoluble: el flujo pedía el
+    // detalle del proyecto una y otra vez aunque el dato no exista en la base.
+    // 7 de 30 planes de producción quedaban colgados ahí, uno de ellos en obra.
+    if (packet.project?.id && packet.project?.currency && !packet.project?.estimatedHandoverDate && !packet.paymentConfiguration?.targetDate) {
+      question(questions, "target_date", `El proyecto no tiene fecha estimada de entrega cargada. ¿Cuál es la fecha prevista de entrega de "${packet.project.name}"?`, "paymentConfiguration.targetDate", null, { valueType: "date" });
+    }
+    const projectDated = packet.project?.currency && (packet.project?.estimatedHandoverDate || packet.paymentConfiguration?.targetDate);
+    if (packet.project?.id && projectDated && !packet.projectUnit?.id) action(actions, "projectUnit", ["list_project_units", "get_project_unit"], "Lista las unidades del proyecto; usa get_project_unit solo si la lista no contiene precio y código.", { projectId: packet.project.id });
+    if (packet.project?.id && projectDated && !packet.projectPaymentPlan?.id) action(actions, "projectPaymentPlan", ["get_project_payment_plan", "get_development_project"], "Carga el plan elegido. Si get_project_payment_plan no existe, ingiere paymentPlans del detalle del proyecto.", { projectId: packet.project.id });
   }
 
   if (packet.quotationType === "readyProperty") {
@@ -351,7 +361,6 @@ export function validatePacket(packet = {}, { final = true } = {}) {
     required(errors, packet.project?.id, "project.id", "El proyecto");
     required(errors, packet.project?.name, "project.name", "El nombre del proyecto");
     required(errors, packet.project?.currency, "project.currency", "La moneda del proyecto");
-    required(errors, packet.project?.estimatedHandoverDate, "project.estimatedHandoverDate", "La fecha estimada de entrega");
     required(errors, packet.projectUnit?.id, "projectUnit.id", "La unidad");
     required(errors, packet.projectUnit?.code, "projectUnit.code", "El código de la unidad");
     positiveDecimal(errors, packet.projectUnit?.basePrice, "projectUnit.basePrice", "El precio base");
@@ -362,6 +371,9 @@ export function validatePacket(packet = {}, { final = true } = {}) {
     uuid(errors, packet.projectUnit?.id, "projectUnit.id");
     uuid(errors, packet.projectPaymentPlan?.id, "projectPaymentPlan.id");
     validDate(errors, packet.project?.estimatedHandoverDate, "project.estimatedHandoverDate", "La fecha estimada de entrega");
+    validDate(errors, packet.paymentConfiguration?.targetDate, "paymentConfiguration.targetDate", "La fecha prevista de entrega");
+    // Exigimos la fecha RESUELTA: la del proyecto o, si no está, la del asesor.
+    required(errors, resolveQuotation(packet).targetDate, "targetDate", "La fecha de entrega (del proyecto o indicada por el asesor)");
     if (packet.projectPaymentPlan?.status && packet.projectPaymentPlan.status !== "active") errors.push({ code: "inactive_plan", path: "projectPaymentPlan.status", message: "El plan del proyecto debe estar activo." });
     if (packet.project?.currency && packet.projectPaymentPlan?.currency && packet.project.currency !== packet.projectPaymentPlan.currency) errors.push({ code: "currency_mismatch", path: "projectPaymentPlan.currency", message: "La moneda del proyecto no coincide con la del plan." });
     if (packet.projectUnit?.status && !["available", "reserved"].includes(packet.projectUnit.status)) warnings.push({ code: "unit_status", path: "projectUnit.status", message: `La unidad tiene estado ${packet.projectUnit.status}.` });
