@@ -226,8 +226,14 @@ export function nextStep(packet = {}) {
   // Sin fecha de entrega, lo que hace falta para proyectar el tramo de obra no
   // es la fecha: es CUÁNTAS cuotas. Es lo que el cliente pregunta de verdad.
   const constructionLine = resolved.installments.find((item) => item.milestoneType === "constructionPayment");
-  if (constructionLine && !resolved.targetDate && !packet.paymentConfiguration?.constructionInstallments) {
-    question(questions, "construction_installments", "El proyecto no tiene fecha de entrega cargada. ¿En cuántas cuotas mensuales se paga el tramo de construcción?", "paymentConfiguration.constructionInstallments", null, { valueType: "integer" });
+  // Lo que arma la tabla son las FECHAS. La cantidad de cuotas se deduce de
+  // ellas; preguntar "cuántas" obligaba además a asumir desde cuándo arrancan.
+  if (constructionLine && !resolved.targetDate) {
+    if (!packet.paymentConfiguration?.constructionFirstPaymentDate) {
+      question(questions, "construction_first_payment_date", "El proyecto no tiene fecha de entrega cargada. ¿En qué mes se paga la PRIMERA cuota de construcción?", "paymentConfiguration.constructionFirstPaymentDate", null, { valueType: "date" });
+    } else if (!packet.paymentConfiguration?.constructionLastPaymentDate) {
+      question(questions, "construction_last_payment_date", "¿Y en qué mes se paga la ÚLTIMA?", "paymentConfiguration.constructionLastPaymentDate", null, { valueType: "date" });
+    }
   }
   if (constructionLine && packet.document?.date && resolved.targetDate
       && constructionWindow(packet.document.date, resolved.targetDate) < 1
@@ -235,7 +241,12 @@ export function nextStep(packet = {}) {
     const amount = constructionLine.amountType === "percentage" ? `${constructionLine.amountValue}%` : `${constructionLine.amountValue} ${resolved.currency || ""}`.trim();
     question(questions, "construction_payment_date", `Entre la cotización y la entrega (${resolved.targetDate}) no entra ninguna cuota mensual. ¿En qué fecha se paga el tramo de ${amount}?`, "paymentConfiguration.constructionPaymentDate", null, { valueType: "date" });
   }
-  if (resolved.installments.some((item) => SERIES_MILESTONES.has(item.milestoneType)) && !packet.paymentConfiguration?.constructionMethod) {
+  // Sólo se confirma la metodología cuando el cronograma se DERIVA de la fecha
+  // de entrega. Si el asesor ya dio las fechas exactas, no hay nada que derivar
+  // — y preguntarle si confirma una regla que no se le aplicó era confuso.
+  const derivesSchedule = resolved.installments.some((item) => item.milestoneType === "postDelivery")
+    || (resolved.installments.some((item) => item.milestoneType === "constructionPayment") && Boolean(resolved.targetDate));
+  if (derivesSchedule && !packet.paymentConfiguration?.constructionMethod) {
     question(questions, "confirm_monthly_projection", "¿Confirmas cuotas mensuales iguales, comenzando dos meses después de la fecha de cotización y terminando el mes anterior al cierre o entrega?", "paymentConfiguration.constructionMethod", [
       { label: "Sí, aplicar esta metodología", value: "monthlyUntilTarget" },
       { label: "No, usa otra metodología", value: "unsupported" },
@@ -415,7 +426,9 @@ export function validatePacket(packet = {}, { final = true } = {}) {
   if (final && hasReservation && hasCreditTarget && !["creditAgainstSigning", "standalone"].includes(packet.paymentConfiguration?.reservationApplication)) {
     errors.push({ code: "reservation_application_required", path: "paymentConfiguration.reservationApplication", message: "Debe confirmarse cómo se aplica la reserva." });
   }
-  if (final && hasSeries && packet.paymentConfiguration?.constructionMethod !== "monthlyUntilTarget") {
+  const derivesSchedule = resolved.installments.some((item) => item.milestoneType === "postDelivery")
+    || (resolved.installments.some((item) => item.milestoneType === "constructionPayment") && Boolean(resolved.targetDate));
+  if (final && hasSeries && derivesSchedule && packet.paymentConfiguration?.constructionMethod !== "monthlyUntilTarget") {
     errors.push({ code: "construction_method_required", path: "paymentConfiguration.constructionMethod", message: "Debe confirmarse la metodología mensual de proyección." });
   }
   // Cuántos meses dura el tramo post-entrega no está en RealterHub ni se puede
@@ -424,9 +437,18 @@ export function validatePacket(packet = {}, { final = true } = {}) {
   if (final && resolved.installments.some((item) => item.milestoneType === "postDelivery") && !resolved.targetDate) {
     errors.push({ code: "target_date_required", path: "targetDate", message: "El tramo posterior a la entrega se cuenta desde la entrega: hace falta esa fecha." });
   }
-  if (final && resolved.installments.some((item) => item.milestoneType === "constructionPayment") && !resolved.targetDate
-      && !/^\d{1,3}$/.test(String(packet.paymentConfiguration?.constructionInstallments ?? ""))) {
-    errors.push({ code: "construction_installments_required", path: "paymentConfiguration.constructionInstallments", message: "Sin fecha de entrega, debe indicarse en cuántas cuotas mensuales se paga el tramo de construcción." });
+  if (final && resolved.installments.some((item) => item.milestoneType === "constructionPayment") && !resolved.targetDate) {
+    const first = packet.paymentConfiguration?.constructionFirstPaymentDate;
+    const last = packet.paymentConfiguration?.constructionLastPaymentDate;
+    validDate(errors, first, "paymentConfiguration.constructionFirstPaymentDate", "La fecha de la primera cuota");
+    validDate(errors, last, "paymentConfiguration.constructionLastPaymentDate", "La fecha de la última cuota");
+    if (!first || !last) {
+      errors.push({ code: "construction_dates_required", path: "paymentConfiguration.constructionFirstPaymentDate", message: "Sin fecha de entrega, deben indicarse la primera y la última cuota del tramo de construcción." });
+    } else if (isRealDate(first) && isRealDate(last)) {
+      if (monthIndex(last) < monthIndex(first)) errors.push({ code: "construction_dates_inverted", path: "paymentConfiguration.constructionLastPaymentDate", message: "La última cuota no puede caer antes que la primera." });
+      else if (monthIndex(first) < monthIndex(packet.document?.date ?? first)) errors.push({ code: "construction_dates_inverted", path: "paymentConfiguration.constructionFirstPaymentDate", message: "La primera cuota no puede caer antes del mes de la cotización." });
+      else if (monthIndex(last) - monthIndex(first) + 1 > MAX_SERIES_MONTHS) errors.push({ code: "construction_dates_inverted", path: "paymentConfiguration.constructionLastPaymentDate", message: `El tramo no puede superar ${MAX_SERIES_MONTHS} cuotas mensuales.` });
+    }
   }
   if (final && resolved.installments.some((item) => item.milestoneType === "postDelivery")) {
     const months = String(packet.paymentConfiguration?.postDeliveryMonths ?? "");
@@ -550,10 +572,13 @@ export function calculateQuotation(packet) {
     // Sin ventana mensual, la fecha del tramo la puso el asesor: el motor no
     // elige ni cuántos pagos son ni cuándo caen.
     const singleDate = isConstruction && targetDate && window < 1 ? packet.paymentConfiguration.constructionPaymentDate : null;
+    const answeredFirst = packet.paymentConfiguration?.constructionFirstPaymentDate;
+    const answeredLast = packet.paymentConfiguration?.constructionLastPaymentDate;
+    const answeredSeries = isConstruction && !targetDate && answeredFirst && answeredLast;
     const count = singleDate
       ? 1
       : isConstruction
-        ? (targetDate ? window : Number(packet.paymentConfiguration.constructionInstallments))
+        ? (targetDate ? window : monthIndex(answeredLast) - monthIndex(answeredFirst) + 1)
         : Number(packet.paymentConfiguration.postDeliveryMonths);
     const { each, residue } = splitEqually(amount, count);
     if (residue > 0n) residues.push({ milestoneType: line.milestoneType, count, residueMinor: residue });
@@ -563,7 +588,10 @@ export function calculateQuotation(packet) {
         label: count === 1 ? labelFor(line.milestoneType) : `Cuota ${index + 1}`,
         // Obra: arranca dos meses después de la cotización. Post-entrega: el
         // mes siguiente a la entrega.
-        dueDate: singleDate ?? (isConstruction ? addMonths(quoteDate, index + 2) : addMonths(targetDate, index + 1)),
+        dueDate: singleDate
+          ?? (answeredSeries
+            ? addMonths(answeredFirst, index)
+            : isConstruction ? addMonths(quoteDate, index + 2) : addMonths(targetDate, index + 1)),
         amountMinor: each,
         kind: isConstruction ? "construction" : "postDelivery",
       });
