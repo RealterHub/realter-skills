@@ -14,6 +14,7 @@ const ANSWERS = {
   confirm_monthly_projection: { path: ["paymentConfiguration", "constructionMethod"], type: "enum", values: ["monthlyUntilTarget", "unsupported"] },
   post_delivery_months: { path: ["paymentConfiguration", "postDeliveryMonths"], type: "integer" },
   construction_payment_date: { path: ["paymentConfiguration", "constructionPaymentDate"], type: "date" },
+  payment_day: { path: ["paymentConfiguration", "paymentDay"], type: "integer" },
   construction_first_payment_date: { path: ["paymentConfiguration", "constructionFirstPaymentDate"], type: "date" },
   construction_last_payment_date: { path: ["paymentConfiguration", "constructionLastPaymentDate"], type: "date" },
 };

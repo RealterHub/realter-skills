@@ -41,9 +41,18 @@ function monthIndex(date) {
   return year * 12 + month - 1;
 }
 
-function addMonths(date, count) {
+/**
+ * Mes + N, cayendo en `day`. Si el mes no llega a ese día (31 en abril, 30 en
+ * febrero) cae el último del mes: se declara en la pregunta, no se asume.
+ * `day` por defecto 1 sólo para los cálculos internos de mes, donde el día no
+ * participa; las cuotas siempre reciben el día que respondió el asesor.
+ */
+function addMonths(date, count, day = 1) {
   const [year, month] = date.slice(0, 7).split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1 + count, 1)).toISOString().slice(0, 10);
+  const target = new Date(Date.UTC(year, month - 1 + count, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(Number(day) || 1, lastDay));
+  return target.toISOString().slice(0, 10);
 }
 
 function required(errors, value, path, label) {
@@ -225,6 +234,10 @@ export function nextStep(packet = {}) {
   }
   // Sin fecha de entrega, lo que hace falta para proyectar el tramo de obra no
   // es la fecha: es CUÁNTAS cuotas. Es lo que el cliente pregunta de verdad.
+  // El día en que caen las cuotas es un dato del acuerdo, no del motor.
+  if (resolved.installments.some((item) => SERIES_MILESTONES.has(item.milestoneType)) && !packet.paymentConfiguration?.paymentDay) {
+    question(questions, "payment_day", "¿Qué día de cada mes caen las cuotas? (1 al 31; en los meses que no llegan a ese día, cae el último)", "paymentConfiguration.paymentDay", null, { valueType: "integer" });
+  }
   const constructionLine = resolved.installments.find((item) => item.milestoneType === "constructionPayment");
   // Lo que arma la tabla son las FECHAS. La cantidad de cuotas se deduce de
   // ellas; preguntar "cuántas" obligaba además a asumir desde cuándo arrancan.
@@ -426,6 +439,9 @@ export function validatePacket(packet = {}, { final = true } = {}) {
   if (final && hasReservation && hasCreditTarget && !["creditAgainstSigning", "standalone"].includes(packet.paymentConfiguration?.reservationApplication)) {
     errors.push({ code: "reservation_application_required", path: "paymentConfiguration.reservationApplication", message: "Debe confirmarse cómo se aplica la reserva." });
   }
+  if (final && hasSeries && !/^([1-9]|[12]\d|3[01])$/.test(String(packet.paymentConfiguration?.paymentDay ?? ""))) {
+    errors.push({ code: "payment_day_required", path: "paymentConfiguration.paymentDay", message: "Debe indicarse qué día de cada mes caen las cuotas (1 al 31)." });
+  }
   const derivesSchedule = resolved.installments.some((item) => item.milestoneType === "postDelivery")
     || (resolved.installments.some((item) => item.milestoneType === "constructionPayment") && Boolean(resolved.targetDate));
   if (final && hasSeries && derivesSchedule && packet.paymentConfiguration?.constructionMethod !== "monthlyUntilTarget") {
@@ -514,6 +530,7 @@ export function calculateQuotation(packet) {
   const source = [...resolved.installments].sort((a, b) => a.position - b.position);
 
   const reservation = source.find((item) => item.milestoneType === "reservation");
+  const paymentDay = packet.paymentConfiguration?.paymentDay;
   const creditTarget = creditTargetOf(source);
   const credits = Boolean(reservation && creditTarget && packet.paymentConfiguration?.reservationApplication === "creditAgainstSigning");
   const reservationMinor = reservation ? lineAmountMinor(reservation, priceMinor, fractionDigits) : 0n;
@@ -590,8 +607,8 @@ export function calculateQuotation(packet) {
         // mes siguiente a la entrega.
         dueDate: singleDate
           ?? (answeredSeries
-            ? addMonths(answeredFirst, index)
-            : isConstruction ? addMonths(quoteDate, index + 2) : addMonths(targetDate, index + 1)),
+            ? addMonths(answeredFirst, index, paymentDay)
+            : isConstruction ? addMonths(quoteDate, index + 2, paymentDay) : addMonths(targetDate, index + 1, paymentDay)),
         amountMinor: each,
         kind: isConstruction ? "construction" : "postDelivery",
       });
