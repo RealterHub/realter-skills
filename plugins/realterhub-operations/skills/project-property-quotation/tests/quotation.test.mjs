@@ -553,16 +553,52 @@ test("asks for the delivery date instead of blocking when the project has none",
 
   const step = nextStep(packet);
   assert.equal(step.actions.length, 0, "no debe quedar ninguna acción irresoluble");
-  const question = step.questions.find((item) => item.code === "target_date");
+  // Y no pide la FECHA: pide lo único que hace falta para proyectar, que es
+  // cuántas cuotas. La fecha es una forma de deducirlo, no el dato en sí.
+  const question = step.questions.find((item) => item.code === "construction_installments");
   assert.ok(question);
-  assert.equal(question.writes, "paymentConfiguration.targetDate");
+  assert.equal(question.writes, "paymentConfiguration.constructionInstallments");
+  assert.ok(!step.questions.some((item) => item.code === "target_date"));
 
-  // Con la fecha del asesor, cotiza normalmente.
-  packet.paymentConfiguration = { targetDate: "2026-11-20", reservationApplication: "creditAgainstSigning", constructionMethod: "monthlyUntilTarget" };
+  packet.paymentConfiguration = { constructionInstallments: "24", reservationApplication: "creditAgainstSigning", constructionMethod: "monthlyUntilTarget" };
   assert.equal(validatePacket(packet).valid, true);
   const result = calculateQuotation(packet);
-  assert.equal(result.constructionCount, 8);
+  assert.equal(result.constructionCount, 24);
   assert.equal(result.scheduledMinor + result.differenceMinor, result.priceMinor);
+  // El cierre queda sin fecha, no inventada.
+  assert.equal(result.installments.at(-1).dueDate, null);
+});
+
+test("quotes a plan with no monthly tranche and no delivery date at all", () => {
+  // El caso más claro: sin tramo de obra la fecha sólo era el rótulo del cierre.
+  // No hacía ninguna falta para calcular, y sin embargo bloqueaba.
+  const packet = projectPacket();
+  delete packet.project.estimatedHandoverDate;
+  packet.paymentConfiguration = { reservationApplication: "creditAgainstSigning" };
+  packet.projectPaymentPlan.installments = [
+    { position: 1, milestoneType: "reservation", amountType: "fixed", amountValue: "5000.00" },
+    { position: 2, milestoneType: "contractSigning", amountType: "percentage", amountValue: "10.00" },
+    { position: 3, milestoneType: "closing", amountType: "percentage", amountValue: "90.00" },
+  ];
+  assert.deepEqual(nextStep(packet).questions.map((item) => item.code), []);
+  assert.equal(validatePacket(packet).valid, true);
+  const result = calculateQuotation(packet);
+  assert.equal(result.installments.length, 3);
+  assert.equal(result.scheduledMinor + result.differenceMinor, result.priceMinor);
+});
+
+test("still requires the delivery date when the plan has a postDelivery tranche", () => {
+  // Ese hito se define RESPECTO de la entrega: sin esa fecha no existe.
+  const packet = projectPacket();
+  delete packet.project.estimatedHandoverDate;
+  packet.paymentConfiguration = { reservationApplication: "creditAgainstSigning", constructionMethod: "monthlyUntilTarget", constructionInstallments: "12", postDeliveryMonths: "24" };
+  packet.projectPaymentPlan.installments = [
+    { position: 1, milestoneType: "contractSigning", amountType: "percentage", amountValue: "20.00" },
+    { position: 2, milestoneType: "constructionPayment", amountType: "percentage", amountValue: "30.00" },
+    { position: 3, milestoneType: "postDelivery", amountType: "percentage", amountValue: "50.00" },
+  ];
+  assert.ok(nextStep(packet).questions.some((item) => item.code === "target_date"));
+  assert.ok(validatePacket(packet).errors.some((error) => error.code === "target_date_required"));
 });
 
 test("prefers the project's own handover date over the advisor's answer", () => {
