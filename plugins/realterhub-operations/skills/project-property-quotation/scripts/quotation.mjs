@@ -2,6 +2,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { serialize, validatePacket } from "./lib/engine.mjs";
@@ -98,7 +99,14 @@ async function main() {
   const outputDir = path.resolve(options["output-dir"] || process.cwd());
   await mkdir(outputDir, { recursive: true });
   const subjectCode = packet.quotationType === "projectUnit" ? packet.projectUnit.code : packet.property.code;
-  const basename = slug(`quotation-${packet.contact.fullName}-${subjectCode}`) || "quotation";
+  // El sufijo distingue dos cotizaciones de la MISMA unidad para el MISMO
+  // cliente con planes de pago distintos — el caso de "te muestro dos opciones".
+  // Sin él la segunda pisaba la primera sin decir nada. Regenerar la misma
+  // cotización sí sobrescribe, que es lo que uno espera.
+  const fingerprint = createHash("sha256")
+    .update(JSON.stringify({ terms: packet.projectPaymentPlan?.installments ?? null, config: packet.paymentConfiguration, date: packet.document.date }))
+    .digest("hex").slice(0, 6);
+  const basename = `${slug(`quotation-${packet.contact.fullName}-${subjectCode}`) || "quotation"}-${fingerprint}`;
   const htmlPath = path.join(outputDir, `${basename}.html`);
   const html = await renderQuotation(packet);
   await writeFile(htmlPath, html, "utf8");

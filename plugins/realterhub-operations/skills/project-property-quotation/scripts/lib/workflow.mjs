@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { access, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { nextStep } from "./engine.mjs";
+import { isRealDate, nextStep } from "./engine.mjs";
 
 const ANSWERS = {
   select_quotation_type: { path: ["quotationType"], type: "enum", values: ["projectUnit", "readyProperty"] },
@@ -200,7 +200,10 @@ export async function loadState(file) {
 
 export async function initializeState(file, date) {
   if (!file) throw new Error("Falta --state <quotation.json>.");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date ?? ""))) throw new Error("Falta --date YYYY-MM-DD o la fecha no es válida.");
+  // Mismo criterio que el validador del motor. Antes era sólo la regex, así que
+  // "2026-13-99" se sellaba sin chistar y recién saltaba en el `validate` final,
+  // después de que el operador hizo toda la ingesta.
+  if (!isRealDate(String(date ?? ""))) throw new Error("Falta --date YYYY-MM-DD o la fecha no es una fecha real.");
   try {
     await access(path.resolve(file));
     throw new Error("El estado ya existe. Usa otro archivo; init no sobrescribe cotizaciones.");
@@ -301,9 +304,18 @@ export async function recordAnswer(stateFile, code, value) {
   if ((!current || current.code !== code) && !answered) {
     throw new Error(`La respuesta ${code} no es la siguiente pregunta permitida por el flujo.`);
   }
+  const normalized = normalizeAnswer(definition, value);
+  // Cambiar el tipo de cotización descarta lo del tipo anterior. Sin esto, el
+  // proyecto/unidad/plan ingeridos quedaban de basura huérfana para siempre, y
+  // peor: `reservationApplication` y `constructionMethod` contestadas para un
+  // proyecto en obra se reaplicaban solas a una reventa sin volver a preguntar.
+  if (code === "select_quotation_type" && packet.quotationType && packet.quotationType !== normalized) {
+    for (const key of ["project", "projectUnit", "projectPaymentPlan", "property", "propertyOffering"]) delete packet[key];
+    packet.paymentConfiguration = {};
+  }
   let target = packet;
   for (const segment of definition.path.slice(0, -1)) target = target[segment] ??= {};
-  target[definition.path.at(-1)] = normalizeAnswer(definition, value);
+  target[definition.path.at(-1)] = normalized;
   await atomicWrite(stateFile, packet);
   return { status: "answered", code };
 }
