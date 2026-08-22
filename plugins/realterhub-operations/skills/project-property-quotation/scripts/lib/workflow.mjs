@@ -98,7 +98,6 @@ function normalize(resource, item) {
     code: first(source.code, null),
     currency: first(source.currency, source.defaultCurrency),
     estimatedHandoverDate: first(source.estimatedHandoverDate, source.handoverDate, source.deliveryDate),
-    featuredImageUrl: first(source.featuredImageUrl, source.featuredImage?.publicUrl, source.image?.publicUrl, null),
   });
   if (resource === "projectUnit") return compact({
     id: source.id,
@@ -112,7 +111,6 @@ function normalize(resource, item) {
   if (resource === "projectPaymentPlan") return compact({
     id: source.id,
     name: source.name,
-    description: first(source.description, null),
     currency: source.currency,
     status: source.status,
     installments: (source.installments ?? []).map((entry, index) => compact({
@@ -129,12 +127,6 @@ function normalize(resource, item) {
     propertyType: first(source.propertyType, source.type, null),
     propertySubtype: first(source.propertySubtype, source.subtype, null),
     areas: first(source.areas, null),
-    availability: first(source.availability, source.status, null),
-    sectorName: first(source.sectorName, source.sector?.name, null),
-    addressLine1: first(source.addressLine1, source.address?.line1, null),
-    city: first(source.city, null),
-    state: first(source.state, null),
-    featuredImage: first(source.featuredImage, null),
   });
   if (resource === "propertyOffering") return compact({
     id: source.id,

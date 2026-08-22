@@ -101,6 +101,13 @@ export async function renderQuotation(packet) {
     return `<tr><td><strong>${escapeHtml(installment.label)}</strong></td><td>${escapeHtml(formatDate(installment.dueDate, locale, installment.kind !== "closing"))}</td><td class="money">${escapeHtml(formatMoney(installment.amountMinor, calculation.currency, calculation.fractionDigits, locale))}</td></tr>`;
   }).join("\n");
   const warnings = calculation.warnings.length ? `<div class="notice">${calculation.warnings.map((item) => escapeHtml(item.message)).join(" ")}</div>` : "";
+  // Las cuotas se dejan iguales y el residuo truncado no se asigna a ninguna,
+  // así que el total proyectado puede quedar unos centavos por debajo del
+  // precio. El documento lo dice: dos totales distintos sin explicación es lo
+  // que hace que un cliente desconfíe de la cotización.
+  const roundingNote = calculation.residueMinor > 0n
+    ? `<p class="reconciliation">Las cuotas se muestran iguales y redondeadas al centavo; la diferencia con el precio cotizado es de ${escapeHtml(formatMoney(calculation.residueMinor, calculation.currency, calculation.fractionDigits, locale))}.</p>`
+    : "";
   const offeringLabel = packet.quotationType === "readyProperty" && packet.propertyOffering.isNegotiable ? "Precio negociable" : "Precio cotizado";
 
   const template = await readFile(fileURLToPath(templateUrl), "utf8");
@@ -123,7 +130,7 @@ export async function renderQuotation(packet) {
     SUMMARY_ROWS: summaryRows,
     PROJECTION_ROWS: projectionRows,
     WARNINGS: warnings,
-    NOTES: packet.notes ? `<section class="notes"><h2>Notas</h2><p>${escapeHtml(packet.notes)}</p></section>` : "",
+    ROUNDING_NOTE: roundingNote,
     DISCLAIMER: escapeHtml(QUOTATION_DISCLAIMER),
   });
 }
