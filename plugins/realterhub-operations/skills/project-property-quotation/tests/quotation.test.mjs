@@ -198,7 +198,7 @@ test("ingests the real get_current_context payload (me + MCP envelope)", async (
         name: "Inmobiliaria Aurora",
         legalName: "Aurora SRL",
         logoUrl: "https://cdn.example.com/aurora.png",
-        preferredLanguage: "es-DO",
+        preferredLanguage: "es-CO",
       },
       me: {
         id: "70000000-0000-4000-8000-000000000007",
@@ -217,6 +217,9 @@ test("ingests the real get_current_context payload (me + MCP envelope)", async (
     assert.equal(saved.organization.name, "Inmobiliaria Aurora");
     assert.equal(saved.organization.logoUrl, "https://cdn.example.com/aurora.png");
     assert.equal(saved.collaborator.fullName, "Ana Gómez");
+    // me.language null → cae al preferredLanguage de la organización, resuelto
+    // por el script (jamás por el LLM); el formato de fechas/números lo sigue.
+    assert.equal(saved.document.locale, "es-CO");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

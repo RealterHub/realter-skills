@@ -70,12 +70,18 @@ function normalize(resource, item) {
     // `me` es el contrato real de get_current_context (RealterHub); el resto son
     // lecturas equivalentes de compatibilidad.
     const collaborator = first(source.me, source.collaborator, source.user, source.member, source.authenticatedUser, {});
+    // Locale del documento, resuelto aquí (no por el LLM): idioma del usuario
+    // vinculado, luego el de la organización. Solo formatos BCP-47 simples; un
+    // null significa el default de la plataforma y se conserva el del init.
+    const localeCandidate = first(collaborator.language, collaborator.preferredLanguage, organization.preferredLanguage);
+    const locale = /^[a-z]{2}(-[A-Z]{2})?$/.test(String(localeCandidate ?? "")) ? localeCandidate : undefined;
     return {
       organization: compact({
         name: first(organization.name, source.organizationName),
         logoUrl: first(organization.logoUrl, organization.logo?.publicUrl, organization.logo?.url, null),
       }),
       collaborator: compact({ fullName: first(collaborator.fullName, collaborator.name, source.collaboratorName) }),
+      ...(locale ? { locale } : {}),
     };
   }
   if (resource === "contact") return compact({
@@ -236,6 +242,7 @@ export async function ingestResource(stateFile, resource, rawFile, selectedId) {
     validateNormalized(resource, normalized);
     packet.organization = normalized.organization;
     packet.collaborator = normalized.collaborator;
+    if (normalized.locale) packet.document.locale = normalized.locale;
     await atomicWrite(stateFile, packet);
     return { status: "ingested", resource };
   }

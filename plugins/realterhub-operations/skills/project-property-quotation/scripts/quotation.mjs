@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -22,17 +22,25 @@ function parseArgs(argv) {
   return { command, options };
 }
 
-async function loadPacket(file) {
-  if (!file) throw new Error("Falta --state <quotation.json>.");
-  return JSON.parse(await readFile(path.resolve(file), "utf8"));
-}
-
 function slug(value) {
   return String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
 }
 
 function findBrowser(explicit) {
-  const candidates = [explicit, process.env.REALTERHUB_BROWSER, "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/microsoft-edge"].filter(Boolean);
+  const candidates = [
+    explicit,
+    process.env.REALTERHUB_BROWSER,
+    // Linux
+    "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/microsoft-edge",
+    // macOS
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    // Windows
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+  ].filter(Boolean);
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
@@ -67,7 +75,10 @@ async function main() {
     process.stdout.write(`${serialize(await recordAnswer(options.state, options.question, options.value))}\n`);
     return;
   }
-  const packet = options.state ? await loadState(options.state) : await loadPacket(options.input);
+  // validate/generate SOLO aceptan el estado sellado (--state): un paquete
+  // arbitrario vía --input saltaría el sello de integridad y permitiría
+  // generar cotizaciones con datos que nunca pasaron por ingest/answer.
+  const packet = await loadState(options.state);
   if (command === "next") {
     process.stdout.write(`${serialize(deterministicNext(packet))}\n`);
     return;

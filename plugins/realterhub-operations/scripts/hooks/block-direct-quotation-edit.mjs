@@ -8,7 +8,9 @@ async function readStdin() {
 
 const input = await readStdin();
 const file = String(input?.tool_input?.file_path ?? "");
-if (/(^|\/)(quotation|.+\.quotation)\.json$/i.test(file)) {
+// Protege el estado Y su sello: editar el .realterhub-integrity permitiría
+// re-sellar un estado manipulado a mano.
+if (/(^|\/)(quotation|.+\.quotation)\.json(\.realterhub-integrity)?$/i.test(file)) {
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
