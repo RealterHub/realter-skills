@@ -8,7 +8,7 @@ Usa únicamente las lecturas necesarias para completar el JSON del generador.
 | Contacto | `list_contacts`, `get_contact` | id, nombre, correo y teléfono |
 | Proyecto | `list_development_projects`, `get_development_project` | id, código, nombre, moneda, fecha estimada de entrega y planes activos |
 | Unidad | `list_project_units`, `get_project_unit` | id, código, estado, precio base, tipo y superficie |
-| Plan | `get_project_payment_plan`; como compatibilidad, `paymentPlans` de `get_development_project` | id, nombre, descripción, moneda, estado e installments |
+| Plan | `get_project_payment_plan`; como compatibilidad, `paymentPlans` de `get_development_project` | id, nombre, moneda, estado e installments |
 | Propiedad lista | `list_properties`, `get_property` | id, `name`, código, tipo, `areas` en una línea compacta y ofertas activas |
 | Oferta de reventa | `get_property` | oferta `sale` activa: id, precio, moneda y si es negociable |
 

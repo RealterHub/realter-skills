@@ -72,8 +72,6 @@
     .projection-link { color: var(--info); text-decoration: none; }
     .reconciliation { display: flex; justify-content: flex-end; margin-top: 3mm; font-size: 9px; }
     .notice { margin-top: 4mm; padding: 3mm; border-left: 3px solid #B47B23; color: var(--navy); background: var(--porcelain); }
-    .notes { break-inside: avoid; padding: 4mm 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-    .notes p { margin: 0; white-space: pre-line; }
     .disclaimer { break-inside: avoid; margin-top: 8mm; padding: 4mm 5mm; background: var(--warning); color: var(--warning-contrast); border-radius: 3mm; }
     .disclaimer strong { display: block; margin-bottom: 1mm; font-size: 10px; }
     .disclaimer p { margin: 0; color: inherit; }
@@ -118,8 +116,7 @@
     </div>
 
     <section><h2>Condiciones de pago</h2><table><thead><tr><th>Concepto</th><th>Base</th><th>Monto</th><th>Fecha</th></tr></thead><tbody>{{SUMMARY_ROWS}}</tbody></table></section>
-    {{NOTES}}
-    <section id="payment-projection" class="projection-section"><h2>Proyección de pagos</h2><table class="projection-table"><thead><tr><th>Concepto</th><th>Fecha</th><th>Monto</th></tr></thead><tbody>{{PROJECTION_ROWS}}</tbody></table>{{WARNINGS}}</section>
+    <section id="payment-projection" class="projection-section"><h2>Proyección de pagos</h2><table class="projection-table"><thead><tr><th>Concepto</th><th>Fecha</th><th>Monto</th></tr></thead><tbody>{{PROJECTION_ROWS}}</tbody></table>{{ROUNDING_NOTE}}{{WARNINGS}}</section>
 
     <aside class="disclaimer"><strong>Importante</strong><p>{{DISCLAIMER}}</p></aside>
     <footer><span>Generado con Tecnología <a class="realterhub-link" href="https://realterhub.com" aria-label="RealterHub"><span class="realterhub-realter">Realter</span><span class="realterhub-hub">Hub</span></a></span><span>Vender más. Operar menos. Cobrar antes.</span></footer>

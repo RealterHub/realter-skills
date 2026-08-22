@@ -144,8 +144,17 @@ test("keeps every installment identical and leaves the truncated residue unassig
   assert.ok(result.residueMinor < BigInt(result.constructionCount));
   assert.equal(result.varianceMinor, 0n);
 
+  // El documento declara la diferencia: dos totales que no coinciden y sin
+  // explicación es lo que hace que un cliente desconfíe de la cotización.
   const html = await renderQuotation(packet);
+  assert.match(html, /<p class="reconciliation">/);
+  assert.match(html, /la diferencia con el precio cotizado es de USD 0\.03\./);
   assert.doesNotMatch(html, /Coincide con el precio cotizado/);
+
+  // Y cuando el tramo divide exacto, no hay nota que dar.
+  const exact = await renderQuotation(projectPacket());
+  assert.equal(calculateQuotation(projectPacket()).residueMinor, 0n);
+  assert.doesNotMatch(exact, /<p class="reconciliation">/);
 });
 
 test("keeps a reservation separate only when the percentages reconcile", () => {
